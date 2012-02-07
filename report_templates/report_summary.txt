@@ -1,0 +1,24 @@
+Election Data
+
+
+Source Data
+
+Element Count
+
+source:
+election:
+state:
+ele
+
+Reported Issues Count
+
+source
+-errors:
+-warnings:
+-duplicates:
+
+election
+-errors:
+-warnings:
+-duplicates:
+
