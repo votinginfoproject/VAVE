@@ -1,1 +1,1 @@
-element_name,received_element_id,normalized_feed_id,error_details
+element_name,id,error_details

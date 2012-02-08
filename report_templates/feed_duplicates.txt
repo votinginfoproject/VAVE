@@ -1,1 +1,1 @@
-element_name,received_element_id,normalized_feed_id,duplicate_received_element_ids,duplicate_normalized_element_ids
+element_name,id,duplicate_ids

@@ -1,16 +1,43 @@
-Election Data
+File Validated:
 
+----------------------
+Election Data:
+----------------------
 
+State:
+Date:
+Type:
+Polling Hours:
+
+----------------------
 Source Data
+----------------------
 
+Name:
+Datetime:
+Contact Email:
+
+----------------------
 Element Count
+----------------------
 
 source:
 election:
 state:
-ele
+locality:
+precinct:
+precint_split:
+election_administration:
+election_official:
+polling_location:
+street_segment:
+contest:
+ballot:
+candidate:
 
+----------------------
 Reported Issues Count
+----------------------
 
 source
 -errors:
@@ -18,6 +45,85 @@ source
 -duplicates:
 
 election
+-errors:
+-warnings:
+-duplicates:
+
+state
+-errors:
+-warnings:
+-duplicates:
+
+locality
+-errors:
+-warnings:
+-duplicates:
+
+precinct
+-errors:
+-warnings:
+-duplicates:
+
+precint_split
+-errors:
+-warnings:
+-duplicates:
+
+election_administration
+-errors:
+-warnings:
+-duplicates:
+
+election_official
+-errors:
+-warnings:
+-duplicates:
+
+polling_location
+-errors:
+-warnings:
+-duplicates:
+
+street_segment
+-errors:
+-warnings:
+-duplicates:
+
+contest
+-errors:
+-warnings:
+-duplicates:
+
+ballot
+-errors:
+-warnings:
+-duplicates:
+
+candidate
+-errors:
+-warnings:
+-duplicates:
+
+----------------------
+Locality Breakdown
+----------------------
+
+Adams County:
+-errors:
+-warnings:
+-duplicates:
+
+Clark Count:
+-errors:
+-warnings:
+-duplicates:
+
+Franklin County
+-errors:
+-warnings:
+-duplicates:
+
+Washington County:
 -errors:
 -warnings:
 -duplicates:
