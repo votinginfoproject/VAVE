@@ -5,12 +5,6 @@ INDICATORS = ["all", "sequence", "choice"]
 TYPES = ["simpleType", "complexType"]
 CONTENT = ["simpleContent"]
 
-#TODO:Required for each element. This could be generated when a check is done, or ahead of time in the schema
-#maybe we do not need to do required, have a function that will return the required elements for an element based on
-#on the parameters (ex. no minOccurs, minOccurs = 1, etc.)
-#difference with 'any' elements
-#maybe return 'database' with element and all sub-elements info
-
 class schema:
 
 	def __init__(self, schemafile):
@@ -65,33 +59,23 @@ class schema:
 					data["type"] = tag
 				else:
 					data["option"] = tag
-			
-				data["elements"] = []
-				data["attributes"] = []
-		
-				children = element.getchildren()
-				for child in children:
-					if child.get("name") is not None:
-						data[getXSVal(child)+"s"].append(get_elements(child))
-					else:
-						data.update(get_elements(child))
 
 			else:
 				if tag == "simpleType":
 					return get_simple_type(element)
-				else:
-					data[ename] = {}
-					data[ename].update(element.attrib)
-					del data[ename]["name"]
-					data[ename]["elements"] = []
-					data[ename]["attributes"] = []
-					children = element.getchildren()
+				else: 
+					data.update(element.attrib)
 			
-					for child in children:
-						if child.get("name") is not None:
-							data[ename][getXSVal(child)+"s"].append(get_elements(child))
-						else:
-							data[ename].update(get_elements(child))
+			data["elements"] = []
+			data["attributes"] = []
+			children = element.getchildren()
+			
+			for child in children:
+				if child.get("name") is not None:
+					data[getXSVal(child)+"s"].append(get_elements(child))
+				else:
+					data.update(get_elements(child))
+			
 			return data
 
 		schema = {}
@@ -104,13 +88,64 @@ class schema:
 			schema[c_type].append(get_elements(child))
 		return schema
 
+	def get_simpleTypes(self): #iterate through, return names, could combine with "complex" in separate function
+		simple_types = []
+		for simple in self.schema["simpleType"]:
+			simple_types.append(simple.keys()[0])
+		return simple_types
+
+	def get_complexTypes(self):
+		complex_types = []
+		for complex_t in self.schema["complexType"]:
+			complex_types.append(complex_t.keys()[0])
+		return complex_types
+
+	def get_matching_elements(self, element, attribute_name, attribute):
+		
+		if "elements" in element:
+			element_list = []
+			for i in range(len(element["elements"])):
+				subelement = element["elements"][i]
+				if "elements" in subelement:
+					element_list.extend(self.get_matching_elements(subelement, attribute_name, attribute))
+				else:
+					element_list.append(self.get_matching_elements(subelement, attribute_name, attribute))
+			return element_list
+		elif attribute_name in element and element[attribute_name] == attribute and "name" in element:
+			return element["name"]
+		return
+	
+	def get_elements_of_attribute(self, attribute_name, attribute):
+		
+		element_list = []
+	
+		for i in range(len(self.schema["element"])):
+			element_list.extend(self.get_matching_elements(self.schema["element"][i], attribute_name, attribute))
+		
+		return list(set(element_list))
+
+	def get_elements_of_indicator(self, t):
+		return "test"	
+
+
+#	def get_sub_element_list(name):
+
+#	def get_sub_schema(name):
+
+#	def get_element_attributes(name):
+
 
 if __name__ == '__main__':
 	fschema = urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v2.3.xsd")
 
 	schema = schema(fschema)
 
-	print schema
 
-	for elem in schema.schema["element"][0]["vip_object"]["elements"]:
-		print elem
+	print schema.get_simpleTypes()
+	print schema.get_complexTypes()
+	
+	print schema.get_elements_of_attribute("type", "xs:string")
+
+#	for elem in schema.schema["element"][0]["elements"]:
+#		print elem	
+	#also could write a combo on the front end of get_simpleTypes() and get_elements_of_type() using each of the simple types
