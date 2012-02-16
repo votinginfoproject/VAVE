@@ -91,13 +91,13 @@ class schema:
 	def get_simpleTypes(self): #iterate through, return names, could combine with "complex" in separate function
 		simple_types = []
 		for simple in self.schema["simpleType"]:
-			simple_types.append(simple.keys()[0])
+			simple_types.append(simple["name"])
 		return simple_types
 
 	def get_complexTypes(self):
 		complex_types = []
 		for complex_t in self.schema["complexType"]:
-			complex_types.append(complex_t.keys()[0])
+			complex_types.append(complex_t["name"])
 		return complex_types
 
 	def matching_elements(self, element, attribute_name, attribute):
@@ -178,17 +178,29 @@ class schema:
 				if element_list is not None:
 					return element_list
 
+	def simple_list(self, sub_schema, name):
+		if "name" in sub_schema and sub_schema["name"] == name and "elements" in sub_schema:
+			element_list = []
+			for i in range(len(sub_schema["elements"])):
+				element_list.append(sub_schema["elements"][i])
+			return element_list
+
 	def get_element_list(self, schema_type, name):
 		for i in range(len(self.schema[schema_type])):
-			elements = self.element_list(self.schema[schema_type][i], name)
+			if schema_type != "simpleType":
+				elements = self.element_list(self.schema[schema_type][i], name)
+			else:
+				elements = self.simple_list(self.schema[schema_type][i],name)
 			if elements is not None:
 				return elements
+			
 
 if __name__ == '__main__':
 	fschema = urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v2.3.xsd")
 
 	schema = schema(fschema)
 
+	simples = schema.get_simpleTypes()
 	print schema.get_simpleTypes()
 	print schema.get_complexTypes()
 	
@@ -200,6 +212,9 @@ if __name__ == '__main__':
 	print schema.get_element_attributes("feed_contact_id")
 
 	print schema.get_element_list("element", "source")
+
+	for simple in simples:
+		print schema.get_element_list("simpleType", simple)
 
 	#print schema.schema["simpleType"]
 	#print schema.schema["complexType"]
