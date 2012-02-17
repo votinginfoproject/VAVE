@@ -7,13 +7,16 @@ import psycopg2
 
 TYPES_CONVERSIONS = {	"sqlite3":	{"id":"TEXT", "xs:string":"TEXT", 
 					"xs:integer":"INTEGER", "xs:dateTime":"TEXT", 
-					"xs:date":"TEXT"},
+					"timestamp": "TEXT", "xs:date":"TEXT",
+					"int": "INTEGER", "boolean": "INTEGER"},
 			"mysql":	{"id":"VARCHAR(16)", "xs:string":"VARCHAR(256)", 
 					"xs:integer":"BIGINT", "xs:dateTime":"DATETIME", 
-					"xs:date":"DATE"}, 
+					"timestamp": "TIMESTAMP", "xs:date":"DATE",
+					"int": "INTEGER", "boolean": "TINYINT(1)"}, 
 			"postgres":	{"id":"VARCHAR(16)", "xs:string":"VARCHAR(256)", 
 					"xs:integer":"BIGINT", "xs:dateTime":"TIMESTAMP", 
-					"xs:date":"DATE"}}
+					"timestamp": "TIMESTAMP", "xs:date":"DATE",
+					"int": "INTEGER", "boolean": "BOOLEAN"}} 
 
 SCHEMA_URL = "http://election-info-standard.googlecode.com/files/vip_spec_v3.0.xsd"
 
@@ -38,46 +41,52 @@ def get_parsed_args():
 	return parser.parse_args()
 
 def create_enums(simple, simple_elements):
-	create_statement = "CREATE TYPE " + str(element) + " AS ENUM('"
-	create_statement += "','".join(simple_elements)
-	create_statement += "');"
+	simple_elements = list(set(e.lower() for e in simple_elements)) #eliminate case from enums
+	create_statement = "CREATE TYPE " + str(element) 
+				+ " AS ENUM('" 
+				+ "','".join(simple_elements)
+				+ "');"
 	cursor.execute(create_statement)
 	connection.commit()
-
-def get_id_type(db_type):
-	if database_type == "sqlite3":
-		return "INTEGER PRIMARY KEY AUTOINCREMENT"
-	elif database_type == "mysql":
-		return "BIGINT PRIMARY KEY AUTO_INCREMENT"
-	elif database_type == "postgres":
-		return "SERIAL PRIMARY KEY"
 	
-def complex_create(data):
-	for element in data:
-		create_statement = "CREATE TABLE " + str(element) + " (id " 
-		#create_statement += get_id_type(db_type)
-		for e in data[element]["elements"]:
-			if e["name"] == "None":
-				continue
-			elif e["type"].startswith("xs:"):
-				create_statement += ", " + str(e["name"]) + " " + TYPES[database_type][e["type"]]
-			else:
-				if e["type"] in simple_types:
-					create_statement += ", " + str(e["name"])
-					if database_type == "sqlite3":
-						create_statement += " TEXT"
-					elif database_type == "mysql":
-						create_statement += " ENUM("
-						for e_type in simple_types[e["type"]]["elements"]:
-							create_statement += e_type + ","
-						create_statement = create_statement[:-1] + ")" #remove trailing ',' from ENUM
-				elif e["type"] in complex_types:
-					create_statement += ", " + str(e["name"]) + "_id " + TYPES[database_type]["xs:integer"]
-		create_statement += ");"
-		cursor.execute(create_statement)		
-		if database_type == "postgres":
-			connection.commit()
-	return create_statement
+def create_tables(name, elements): #might be more efficient to make a mapping/pythonic, use names/type added in sync
+	create_statement = "CREATE TABLE " + str(name) 
+				+ " (id " + TYPE_CONVERSIONS[db_type]["id"]
+	
+	if name not in complex_types:
+		create_statement += ", normalized_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
+					+ ", received_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
+					+ ", vip_id " + TYPE_CONVERSIONS[db_type]["int"]
+					+ ", election_id " + TYPE_CONVERSIONS[db_type]["int"]
+					+ ", is_used " + TYPE_CONVERSIONS[db_type]["boolean"]
+
+	for e in elements:
+		if e["name"] == "None":
+			continue
+		elif e["type"].startswith("xs:"):
+			create_statement += ", " + str(e["name"]) 
+						+ " " + TYPE_CONVERSIONS[db_type][e["type"]]
+		else:
+			if e["type"] in simple_types:
+				create_statement += ", " + str(e["name"])
+				if db_type == "sqlite3":
+					create_statement += " TEXT"
+				elif db_type == "mysql":
+					create_statement += " ENUM('"
+								+ "','".join(simple_types[e["type"]["elements"])
+								+ "')"
+				elif db_type == "postgres":
+					create_statement += " " + e["type"]	
+			elif e["type"] in complex_types:
+				create_statement += ", " + str(e["name"]) + "_id " 
+							+ TYPE_CONVERSIONS[db_type]["xs:integer"]
+
+	create_statement += ", last_updated " + TYPES[database_type]["timestamp"]
+				+ ", date_created " + TYPES[database_type]["timestamp"]
+				+ ");"
+
+	cursor.execute(create_statement)		
+	connection.commit()
 
 #default settings: 
 db_type = "sqlite3"
@@ -85,13 +94,6 @@ db_name = "vip"
 host = "localhost"
 username = "username"
 password = "password"
-
-#extra columns added in: auto-incremented bigint id, received_id, vip_id, election_id, last_updated, date_created, normalized_id, is_used
-#exceptions for state, source, and election (shorter id's etc)
-
-#cursor needs to be a script level variable since other mysqldb does not have 'execute script' we will have to execute every table create statement individually
-#Foreign keys are not enforced
-#postgresql does not have tinyint to treat as a boolean, only smallint
 
 parameters = get_parsed_args()
 
@@ -125,43 +127,10 @@ if database_type == "postgres":
 	for simple in simple_types:
 		create_enum(simple, schema.get_element_list("simpleType", simple))
 
-#based on the database_type, create the correct connection type, use the same cursor for all stuff since all types use the same object
+#TODO: get elements/type to pass in, might need another schema function
+for complex_t in complex_types:
+	create_element(complex_t, schema.get_elements("complexType", complex_t))
 
-def element_create(data):
-	for element in data:
-		create_statement = "CREATE TABLE " + str(element["name"]) + " (id " + TYPES[database_type]["id"] + " PRIMARY KEY, element_id " + TYPES[database_type]["xs:integer"]
-		for e in element["elements"]:
-			if e["name"] == "None":
-				continue
-			elif e["type"].startswith("xs:"):
-				create_statement += ", " + str(e["name"]) + " " + TYPES[database_type][e["type"]]
-			else:
-				if e["type"] in simple_types:
-					create_statement += ", " + str(e["name"])
-					if database_type == "sqlite3":
-						create_statement += " TEXT"
-					elif database_type == "mysql":
-						create_statement += " ENUM("
-						for e_type in simple_types[e["type"]]["elements"]:
-							create_statement += "'" + e_type + "',"
-						create_statement = create_statement[:-1] + ")" #remove trailing ',' from ENUM
-					elif database_type == "postgres":
-						create_statement += " " + str(e["type"])
-				elif e["type"] in complex_types:
-					create_statement += ", " + str(e["name"]) + "_id " + TYPES[database_type]["xs:integer"]
-					#could add the foeign key stuff for postgres and mysql
-		create_statement += ");"		
-		print create_statement
-		cursor.execute(create_statement)		
-		if database_type == "postgres":
-			connection.commit()
-	return create_statement
-
-
-
-if database_type == "postgres":
-	create_enums(simple_types)
-element_create(data["elements"])
-complex_create(complex_types)
-
-connection.commit()
+#TODO: change to elements
+for complex_t in complex_types:
+	create_element(complex_t, schema.get_elements("complexType", complex_t))
