@@ -67,6 +67,17 @@ def create_table(name, elements): #might be more efficient/pythonic to make a ma
 	for e in elements:
 		if e["name"] == "None":
 			continue
+		if e["type"] == "complexType":
+			if "simpleContent" in e:
+				create_relation_table = "CREATE TABLE " + str(name) + "_" + e["name"][:e["name"].find("_id")]
+				create_relation_table += "(" + str(name) + "_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
+				create_relation_table += "," + e["name"] + " " + TYPE_CONVERSIONS[db_type]["xs:integer"]
+				for attr in e["attributes"]:
+					create_relation_table += "," + attr["name"] + " " + TYPE_CONVERSIONS[db_type][attr["type"]]
+				create_relation_table += ")"
+				print create_relation_table
+				cursor.execute(create_relation_table)
+				connection.commit()
 		elif e["type"].startswith("xs:"):
 			if "maxOccurs" in e and e["maxOccurs"] == "unbounded":
 				create_relation_table = "CREATE TABLE " + str(name) + "_" + e["name"][:e["name"].find("_id")]
