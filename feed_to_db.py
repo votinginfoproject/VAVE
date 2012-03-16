@@ -90,11 +90,37 @@ for element in elements:
 				cursor.execute(add_insert_str)
 				val_str += ', \"' + str(cursor.lastrowid) + '\"'
 			else:
-				insert_str += ', ' + elem.tag
-				if elem.text is None:
-					val_str += ', \"\"'
+				#first pass: this is written super naively, it will do a check on every single element
+				#as it is inserted, need to store the info locally here to prevent that
+				#could also create a list ahead of time of values for relational tables
+				schema_data = schema.get_element_under_parent(element.tag, elem.tag)
+				if "simpleContent" in schema_data:
+					relat_insert_str = 'INSERT INTO ' + element.tag + '_' + elem.tag[:elem.tag.find("_id")] + ' ('
+					relat_insert_str += 'vip_id,election_id'
+					relat_insert_str += ',' + element.tag + '_id,' + elem.tag
+					relat_value_str = ') VALUES (' + vip_id + ',' + election_id
+					relat_value_str += ',' + str(NORMALIZED_LIST[element_name] + int(element.get('id')))
+					relat_value_str += ',' + str(NORMALIZED_LIST[elem.tag[:elem.tag.find("_id")]] + int(element.text))
+					for attr in schema_data["attributes"]:
+						if elem.get(attr["name"]) is not None:
+							relat_insert_str += ',' + attr["name"]
+							relat_value_str += ',' + elem.get(attr["name"])
+					relat_insert_str += relat_value_str + ')'
+					cursor.execute(relat_insert_str)		
+				elif "maxOccurs" in schema_data and schema_data["maxOccurs"] = "unbounded":
+					relat_insert_str = 'INSERT INTO ' + element.tag + '_' + elem.tag[:elem.tag.find("_id")] + ' ('
+					relat_insert_str += 'vip_id,election_id,' + element.tag + '_id,' + elem.tag + ')'
+					relat_insert_str += ' VALUES (' + vip_id + ',' + election_id
+					relat_insert_str += ',' + str(NORMALIZED_LIST[element_name] + int(element.get('id')))
+					relat_insert_str += ',' + str(NORMALIZED_LIST[elem.tag[:elem.tag.find("_id")]] + int(element.text))
+					relat_insert_str += ')'
+					cursor.execute(relat_insert_str)
 				else:
-					val_str += ', \"' + elem.text.replace('"', "'") + '\"'
+					insert_str += ', ' + elem.tag
+					if elem.text is None:
+						val_str += ', \"\"'
+					else:
+						val_str += ', \"' + elem.text.replace('"', "'") + '\"'
 		insert_str += val_str + ')'
 		print insert_str
 		cursor.execute(insert_str)
