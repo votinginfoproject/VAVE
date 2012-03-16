@@ -5,6 +5,8 @@ import sqlite3
 import MySQLdb as mdb
 import psycopg2
 
+#TODO: Set up time stamps correctly
+
 TYPE_CONVERSIONS = {	"sqlite3":	{"id":"INTEGER PRIMARY KEY", "xs:string":"TEXT", 
 					"xs:integer":"INTEGER", "xs:dateTime":"TEXT", 
 					"timestamp": "TEXT", "xs:date":"TEXT",
@@ -66,8 +68,15 @@ def create_table(name, elements): #might be more efficient/pythonic to make a ma
 		if e["name"] == "None":
 			continue
 		elif e["type"].startswith("xs:"):
-			create_statement += ", " + str(e["name"]) 
-			create_statement += " " + TYPE_CONVERSIONS[db_type][e["type"]]
+			if "maxOccurs" in e and e["maxOccurs"] == "unbounded":
+				create_relation_table = "CREATE TABLE " + str(name) + "_" + e["name"][:e["name"].find("_id")]
+				create_relation_table += "(" + str(name) + "_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
+				create_relation_table += "," + e["name"] + " " + TYPE_CONVERSIONS[db_type]["xs:integer"] + ")"
+				cursor.execute(create_relation_table)
+				connection.commit()
+			else:
+				create_statement += ", " + str(e["name"]) 
+				create_statement += " " + TYPE_CONVERSIONS[db_type][e["type"]]
 		else:
 			if e["type"] in simple_types:
 				create_statement += ", " + str(e["name"])

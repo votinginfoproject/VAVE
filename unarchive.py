@@ -210,12 +210,3 @@ class unarchive:
 				file_list.append(path)
 		
 		return file_list
-
-
-
-#tests = ["test_1.tar.gz", "test_2.tar.bz2", "test_3.tar", "test_4.zip", "xml_test.xml", "csv_test.csv", "text_test.txt"]
-
-#for t in tests:
-#	original_file = t
-#	if not os.path.isdir(t):
-#		unpack(t)

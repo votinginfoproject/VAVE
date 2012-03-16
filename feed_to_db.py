@@ -52,11 +52,6 @@ for element in elements:
 		sub_elements = element.getchildren()
 		
 		insert_str = 'INSERT INTO ' + element.tag + ' (received_id, is_used, normalized_id,vip_id,election_id'
-		#commented out because these should be ignore later, not in this section
-		#if element_name != "source": 
-		#	insert_str += ",vip_id"
-		#if element_name != "contest":
-		#	insert_str += ",election_id"	
 		
 		val_str = ') VALUES (' + str(element.get('id')) + ',TRUE'
 		if element_name == "source":

@@ -165,6 +165,32 @@ class schema:
 				if attributes is not None:
 					return attributes 
 
+	def element_under_parent_attributes(self, attributes, parent_list, parent, name):
+		if "name" in attributes and attributes["name"] == name and parent in parent_list:
+			if "elements" in attributes:
+				clean_attributes = copy.copy(attributes)
+				clean_attributes["elements"] = len(attributes["elements"])
+				return clean_attributes
+			return attributes 
+		elif "elements" in attributes:
+			if "name" in attributes:
+				parent_list.append(attributes["name"])
+			for i in range(len(attributes["elements"])):
+				element_attributes = self.element_under_parent_attributes(attributes["elements"][i], parent_list, parent, name)
+				if element_attributes is not None:
+					return element_attributes 
+
+	def get_element_under_parent(self, parent, name):
+		
+		type_list = ["element", "complexType"]
+		
+		for e_type in type_list:
+			for i in range(len(self.schema[e_type])):
+				attributes = self.element_under_parent_attributes(self.schema[e_type][i], [], parent, name)
+				if attributes is not None:
+					return attributes 
+
+
 	def element_list(self, sub_schema, name):
 		if "name" in sub_schema and sub_schema["name"] == name and "elements" in sub_schema:
 			element_list = []
@@ -196,7 +222,7 @@ class schema:
 			
 
 if __name__ == '__main__':
-	fschema = urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v2.3.xsd")
+	fschema = urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v3.0.xsd")
 
 	schema = schema(fschema)
 
@@ -215,6 +241,9 @@ if __name__ == '__main__':
 
 	for simple in simples:
 		print schema.get_element_list("simpleType", simple)
+
+	print schema.get_element_under_parent("precinct_split","polling_location_id")
+	print schema.get_element_under_parent("contest","electoral_district_id")
 
 	#print schema.schema["simpleType"]
 	#print schema.schema["complexType"]
