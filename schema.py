@@ -174,9 +174,10 @@ class schema:
 			return attributes 
 		elif "elements" in attributes:
 			if "name" in attributes:
-				parent_list.append(attributes["name"])
+				new_parent_list = copy.copy(parent_list)
+				new_parent_list.append(attributes["name"])
 			for i in range(len(attributes["elements"])):
-				element_attributes = self.element_under_parent_attributes(attributes["elements"][i], parent_list, parent, name)
+				element_attributes = self.element_under_parent_attributes(attributes["elements"][i], new_parent_list, parent, name)
 				if element_attributes is not None:
 					return element_attributes 
 
@@ -244,6 +245,7 @@ if __name__ == '__main__':
 
 	print schema.get_element_under_parent("precinct_split","polling_location_id")
 	print schema.get_element_under_parent("contest","electoral_district_id")
+	print schema.get_element_under_parent("source","electoral_district_id")
 
 	#print schema.schema["simpleType"]
 	#print schema.schema["complexType"]
