@@ -107,12 +107,33 @@ def create_table(name, elements): #might be more efficient/pythonic to make a ma
 				create_statement += ", " + str(e["name"]) + "_id " 
 				create_statement += TYPE_CONVERSIONS[db_type]["xs:integer"]
 
-	create_statement += ", last_updated " + TYPE_CONVERSIONS[db_type]["timestamp"]
+	create_statement += ", last_modified " + TYPE_CONVERSIONS[db_type]["timestamp"]
+	if db_type == "sqlite3":
+		create_statement += " DEFAULT CURRENT_TIMESTAMP NOT NULL"
+	elif db_type == "mysql":
+		create_statement += " default now() on update now() "
+	elif db_type == "postgres":
+		create_statement += " SET DEFAULT CURRENT_TIMESTAMP "
 	create_statement += ", date_created " + TYPE_CONVERSIONS[db_type]["timestamp"]
+	if db_type == "sqlite3":
+		create_statement += " DEFAULT CURRENT_TIMESTAMP NOT NULL"
+	if db_type == "mysql":
+		create_statement += " default '0000-00-00 00:00:00' "
+	elif db_type == "postgres":
+		create_statement += " SET DEFAULT CURRENT_TIMESTAMP "
 	create_statement += ");"
 
 	cursor.execute(create_statement)		
 	connection.commit()
+	if db_type == "postgres":
+		create_trigger = "CREATE OR REPLACE FUNCTION update_last_modified() RETURNS TRIGGER AS $$ BEGIN NEW.lastmodified = NOW(); RETURN NEW; END; $$ LANGUAGE 'plpqsql'";
+		cursor.execute(create_trigger)
+		connection.commit()
+	elif db_type == "sqlite3":
+		create_trigger = "CREATE TRIGGER update_last_modified" + str(trigger_count) + " AFTER INSERT ON " + str(name) + " BEGIN UPDATE " + str(name) + " SET last_modified = datetime('now') WHERE id = new." + str(name) + "; END;"
+		cursor.execute(create_trigger)
+		connection.commit()
+		trigger_count += 1;
 
 #default settings: 
 db_type = "sqlite3"
@@ -120,6 +141,7 @@ db_name = "vip"
 host = "localhost"
 username = "username"
 password = "password"
+trigger_count = 0;
 
 parameters = get_parsed_args()
 
