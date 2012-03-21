@@ -6,6 +6,9 @@ INDICATORS = ["all", "sequence", "choice"]
 TYPES = ["simpleType", "complexType"]
 CONTENT = ["simpleContent"]
 
+#TODO:Schema iterator
+#TODO:Write function to get element/parent combos based on attributes
+
 class schema:
 
 	def __init__(self, schemafile):
@@ -250,6 +253,23 @@ if __name__ == '__main__':
 	#print schema.schema["simpleType"]
 	#print schema.schema["complexType"]
 
-	#for elem in schema.schema["element"][0]["elements"]:
-	#	print elem	
+	simpleContents = {}
+	for elem in schema.schema["element"][0]["elements"]:
+		for e in elem["elements"]:
+			if "simpleContent" in e:
+				if e["name"] in simpleContents:
+					simpleContents[e["name"]]["parents"].append(elem['name'])
+				else:
+					simpleContents[e["name"]] = {"parents":[elem['name']]}
+	print simpleContents
+
+	e_p_with_attr = {}
+	for elem in schema.schema["element"][0]["elements"]:
+		for e in elem["elements"]:
+			if "maxOccurs" in e and "simpleContent" not in e and e["maxOccurs"] == "unbounded":
+				if e["name"] in e_p_with_attr:
+					e_p_with_attr[e["name"]]["parents"].append(elem["name"])
+				else:
+					e_p_with_attr[e["name"]] = {"parents":[elem["name"]]}
+	print e_p_with_attr
 	#also could write a combo on the front end of get_simpleTypes() and get_elements_of_type() using each of the simple types
