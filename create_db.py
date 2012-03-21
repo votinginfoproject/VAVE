@@ -5,7 +5,7 @@ import sqlite3
 import MySQLdb as mdb
 import psycopg2
 
-#TODO: Set up time stamps correctly
+#TODO: Add timestamps to relational tables 
 
 TYPE_CONVERSIONS = {	"sqlite3":	{"id":"INTEGER PRIMARY KEY", "xs:string":"TEXT", 
 					"xs:integer":"INTEGER", "xs:dateTime":"TEXT", 
@@ -21,6 +21,8 @@ TYPE_CONVERSIONS = {	"sqlite3":	{"id":"INTEGER PRIMARY KEY", "xs:string":"TEXT",
 					"int": "INTEGER", "boolean": "BOOLEAN"}} 
 
 SCHEMA_URL = "http://election-info-standard.googlecode.com/files/vip_spec_v3.0.xsd"
+
+trigger_count = 0;
 
 def get_parsed_args():
 	parser = argparse.ArgumentParser(description='create database from schema')
@@ -113,23 +115,24 @@ def create_table(name, elements): #might be more efficient/pythonic to make a ma
 	elif db_type == "mysql":
 		create_statement += " default now() on update now() "
 	elif db_type == "postgres":
-		create_statement += " SET DEFAULT CURRENT_TIMESTAMP "
+		create_statement += " DEFAULT CURRENT_TIMESTAMP "
 	create_statement += ", date_created " + TYPE_CONVERSIONS[db_type]["timestamp"]
 	if db_type == "sqlite3":
 		create_statement += " DEFAULT CURRENT_TIMESTAMP NOT NULL"
 	if db_type == "mysql":
 		create_statement += " default '0000-00-00 00:00:00' "
 	elif db_type == "postgres":
-		create_statement += " SET DEFAULT CURRENT_TIMESTAMP "
+		create_statement += " DEFAULT CURRENT_TIMESTAMP "
 	create_statement += ");"
 
 	cursor.execute(create_statement)		
 	connection.commit()
 	if db_type == "postgres":
-		create_trigger = "CREATE OR REPLACE FUNCTION update_last_modified() RETURNS TRIGGER AS $$ BEGIN NEW.lastmodified = NOW(); RETURN NEW; END; $$ LANGUAGE 'plpqsql'";
+		create_trigger = "CREATE OR REPLACE FUNCTION update_last_modified() RETURNS TRIGGER AS $$ BEGIN NEW.lastmodified = NOW(); RETURN NEW; END; $$ LANGUAGE 'plpgsql'";
 		cursor.execute(create_trigger)
 		connection.commit()
 	elif db_type == "sqlite3":
+		global trigger_count
 		create_trigger = "CREATE TRIGGER update_last_modified" + str(trigger_count) + " AFTER INSERT ON " + str(name) + " BEGIN UPDATE " + str(name) + " SET last_modified = datetime('now') WHERE id = new." + str(name) + "; END;"
 		cursor.execute(create_trigger)
 		connection.commit()
@@ -141,7 +144,6 @@ db_name = "vip"
 host = "localhost"
 username = "username"
 password = "password"
-trigger_count = 0;
 
 parameters = get_parsed_args()
 
