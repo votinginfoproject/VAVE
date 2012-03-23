@@ -1,125 +1,148 @@
-import csv
+from lxml import etree
 import MySQLdb as mdb
-import time
-
-connection = mdb.connect('localhost', 'vip', 'username', 'password')
-cursor = connection.cursor(mdb.cursors.DictCursor)
-cursor.execute("DELETE FROM precinct")
-cursor.execute("DELETE FROM polling_location")
-cursor.execute("DELETE FROM simpleAddressType")
-cursor.execute("DELETE FROM detailAddressType")
-cursor.execute("DELETE FROM street_segment")
-
-def get_precincts(data):
-	precinct_info = {}
-	for row in data:
-		county = row["county"]
-		name = int(float(row["precinct_name"]))
-		if name > 100000:
-			name = name/100
-		if county not in precinct_info:
-			precinct_info[county] = []
-		precinct_info[county].append(name)
-	for county in precinct_info:
-		precinct_info[county] = list(set(precinct_info[county]))
-	return precinct_info
-
-def get_locality_ids():
-	county_info = {}
-	cursor.execute("SELECT * FROM locality")
-	rows = cursor.fetchall()
-	for r in rows:
-		county_info[r["name"]] = r["id"]
-	return county_info
-
-def create_simple_address(row):
-	address = row["Address"].split(",")
-	address_insert = "INSERT INTO simpleAddressType (location_name, state"
-	address_values = ") VALUES ('" + row["Location"].replace("'","") + "', 'NV'"
-	if len(address) > 0:
-		address_insert += ", line1"
-		address_values += ", '" + address[0] + "'"
-		if len(address) > 1:
-			address_insert += ", city"
-			address_values += ", '" + address[1] + "'"
-			if len(address) > 2:
-				address_insert += ", zip"
-				address_values += ", '" + address[2].replace("NV", "").strip() + "'"
-
-	cursor.execute(address_insert + address_values + ")")
-	return cursor.lastrowid
+import schema
+import urllib
+import os
+import csv
 
 
-		
-voter_data = csv.DictReader(open("voter_file_clean.txt"))
+#TODO: accomodate for sort_order as part of the relational tables
+fschema = urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v3.0.xsd")
+#fschema = open("schema.xsd")
 
-precinct_codes = get_precincts(voter_data)
+schema = schema.schema(fschema)
 
-localities = get_locality_ids()
+simpleAddressTypes = schema.get_elements_of_attribute("type", "simpleAddressType")
+detailAddressTypes = schema.get_elements_of_attribute("type", "detailAddressType")
 
-used_precincts = {}
-
-precinct_info = {}
-
-caucus_data = csv.DictReader(open("nv_precincts.csv"))
-
-for row in caucus_data:
-	county = row["County"]
-	precinct_list = row["Precinct"]
-	
-	if len(row["County"]) <= 0 or len(row["Precinct"]) <= 0:
-		#print row
-		continue
-
-	address_id = create_simple_address(row)
-	
-	if precinct_list == "All":
-
-		used_precincts[county] = {} 
-		locality_id = localities[county]
-
-		for name in precinct_codes[county]:
-			if len(str(locality_id)) < 4:
-				new_id = int(str(locality_id) + str(name))
+ELEMENT_LIST = schema.get_element_list("element","vip_object")
+SIMPLECONTENTS = {)
+for elem in schema.schema["element"][0]["elements"]:
+	for e in elem["elements"]:
+		if "simpleContent" in e:
+			if e["name"] in SIMPLECONTENTS:
+				SIMPLECONTENTS[e["name"]]["parents"].append(elem['name'])
 			else:
-				new_id = int(str(int(locality_id)*2) + str(name))
-			precinct_id = new_id + 200000000
-			polling_location_id = new_id + 600000000
-			cursor.execute("INSERT INTO precinct (id, element_id, locality_id, polling_location_id, name) VALUES('" + str(precinct_id) + "','" + str(precinct_id) + "','" + str(locality_id) + "','" + str(polling_location_id) + "','" + str(name) + "')")
-			cursor.execute("INSERT INTO polling_location (id, element_id, address_id, polling_hours) VALUES('" + str(polling_location_id) + "','" + str(polling_location_id) + "','" + str(address_id) + "','" + row["Time"] + "')")
-			used_precincts[county][int(name)] = precinct_id
+				SIMPLECONTENTS[e["name"]] = {"parents":[elem['name']]}
+
+UNBOUNDEDS = {}
+for elem in schema.schema["element"][0]["elements"]:
+	for e in elem["elements"]:
+		if "maxOccurs" in e and "simpleContent" not in e and e["maxOccurs"] == "unbounded":
+			if e["name"] in UNBOUNDEDS:
+				UNBOUNDEDS[e["name"]]["parents"].append(elem["name"])
+			else:
+				UNBOUNDEDS[e["name"]] = {"parents":[elem["name"]]}
+
+vip_id = 32
+election_id = 2110
+
+NORMALIZED_LIST = {"locality":10000000000, "precinct":20000000000,
+			"precinct_split":30000000000, "election_administration":40000000000,
+			"election_official":50000000000, "polling_location":60000000000,
+			"electoral_district":70000000000, "street_segment":80000000000,
+			"candidate":90000000000, "ballot":110000000000,
+			"contest":120000000000, "early_vote_site":130000000000,
+			"referendum":140000000000, "custom_ballot":150000000000,
+			"ballot_response":160000000000, "contest_result":170000000000,
+			"ballot_list_result":180000000000}
+
+def insert_string(element_name, element_dict):
+
+	insert_str = "INSERT INTO " + element_name + " ("	
+	insert_str += ",".join(address_dict.keys()) + ") "
+	insert_str += "VALUES (\"" + "\",\"".join(address_dict.vals()) + "\")"
+	return insert_str
+
+def normalized_id(element_name, received_id):
+	if element_name == "source":
+		return str(1)
+	elif element_name == "election":
+		return str(election_id)
+	elif element_name == "state":
+		return str(received_id)
 	else:
-		if county not in used_precincts:
-			used_precincts[county] = {} 
-		locality_id = localities[county]
-		precinct_list = precinct_list.split(",")
-		for precinct in precinct_list:
-			precinct = precinct.strip()
-			if len(str(precinct)) > 0:
-				if len(str(locality_id)) < 4:
-					new_id = int(str(locality_id) + str(precinct))
-				else:
-					new_id = int(str(int(locality_id)*2) + str(precinct))
-				precinct_id = new_id + 200000000
-				polling_location_id = new_id + 600000000
-				cursor.execute("INSERT INTO precinct (id, element_id, locality_id, polling_location_id, name) VALUES('" + str(precinct_id) + "','" + str(precinct_id) + "','" + str(locality_id) + "','" + str(polling_location_id) + "','" + str(precinct) + "')")
-				cursor.execute("INSERT INTO polling_location (id, element_id, address_id) VALUES('" + str(polling_location_id) + "','" + str(polling_location_id) + "','" + str(address_id) + "')")
-				used_precincts[county][int(precinct)] = precinct_id
+		return str(NORMALIZED_LIST[element_name] + int(received_id))
 
+def generate_id(element_name, row):
+	return "random " #TODO:Generate IDs from files without
 
-voter_data = csv.DictReader(open("voter_file_clean.txt"))
-for row in voter_data:
+DIR = ""
+dir_list = os.listdir(DIR)
+for fname in dir_list:
+	ename = fname.split(".")[0].lower() 
+	if ename in ELEMENT_LIST:
 	
-	precinct_name = int(float(row["precinct_name"]))
-	if precinct_name > 100000:
-		precinct_name = precinct_name / 100
-	if row["county"] in used_precincts and int(precinct_name) in used_precincts[row["county"]]:
-		precinct_name = used_precincts[row["county"]][precinct_name]
-	else:
-		continue
+		base_elements = []
+		addresses = {}
+		relationals = []
+		has_id = False
+	
+		data = csv.DictReader(open(fname))
+		headers = data.fieldnames
+	
+		for header in headers:
+			if header == "vip_id":
+				continue
+			elif header == "election_id":
+				continue
+			elif header == "id":
+				has_id = True
+			elif header in ELEMENT_LIST["elements"]: #actuall need to change this to a schema call
+				base_elements.append(header)
+			elif header.endswith("_ids"):
+				relationals.append(header)
+			else:
+				for simpletype in simpleAddressTypes:
+					if header.startswith(simpletype):
+						if simpletype not in addresses:
+							addresses[simpletype] = {}
+							addresses[simpletype]["type"] = "simpleAddressType"
+							addresses[simpletype]["elements"] = []
+						addresses[simpletype]["elements"].append(header[len(simpletype)+1:])
+				for detailtype in detailAddressTypes:
+					if header.startswith(detailtype):
+						if detailtype not in addresses:
+							addresses[detailtype] = {}
+							addresses[detailtype]["type"] = "detailAddressType"
+							addresses[detailtype]["elements"] = []
+		
+		for row in data:
+			
+			insert_dict = {}
+			insert_dict["vip_id"] = vip_id
+			insert_dict["election_id"] = election_id
+			if has_id:
+				insert_dict["received_id"] = row["id"]
+				insert_dict["normalized_id"] = normalized_id(ename, row["id"])
+			else:
+				insert_dict["received_id"] = "0"
+				insert_dict["normalized_id"] = generate_id(ename, row)
+			
+			for address in addresses:
+				address_dict = {}
+				for element in address["elements"]:
+					address_dict[element] = row[address+"_"+element]
+				cursor.execute(insert_string(address["type"], address_dict))
+				insert_dict[address+"_id"] = cursor.lastrowid
+				connection.commit()
 
-	street_id = 800000000 + int(row["id"])
+			for relational in relationals:
+				relat_dict = {}
+				relat_dict["vip_id"] = vip_id
+				relat_dict["election_id"] = election_id
+				relat_dict[ename+"_id"] = insert_dict["normalized_id"]				
 
-	address_insert = "INSERT INTO detailAddressType (street_direction, street_name, street_suffix, city, state, zip) VALUES('" + row["street_direction"] + "','" + row["street_name"].replace("'", "") + "','" + row["street_suffix"] + "','" + row["city"] + "','NV','" + row["zip"] + "')"
-	cursor.execute(address_insert)
-	cursor.execute("INSERT INTO street_segment (id, element_id, start_house_number, end_house_number, odd_even_both, start_apartment_number, end_apartment_number, non_house_address_id, precinct_id) VALUES ('" + str(street_id) + "','" + str(street_id) + "','" + str(row["street_number"]) + "','" + str(row["street_number"]) + "','both','" + str(row["apartment_number"]) + "','" + str(row["apartment_number"]) + "','" + str(cursor.lastrowid) + "','" + str(precinct_name) + "')")
+				relat_ids = row[relational].split(",")
+				for i in range(len(relat_ids)):
+					relat_dict[relational[:-1]] = normalized_id(relational[:-4],relat_ids[i])
+					cursor.execute(insert_string(ename+"_"+relational[:-4],relat_dict))
+					connection.commit()
+
+			for element in base_elements:
+				insert_dict[element] = row[element]
+
+			cursor.execute(insert_string(ename, insert_dict))
+			connection.commit()
+					
+

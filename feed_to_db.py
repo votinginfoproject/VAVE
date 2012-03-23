@@ -145,10 +145,12 @@ for element in elements:
 				cursor.execute(insert_string(elem.tag, relat_dict))
 
 			elif elem.text is not None:
+				if elem.tag.endswith("_id"):
+					elem_dict[elem.tag] = str(NORMALIZED_LIST[elem.tag[:elem.tag.find("_id")]] + int(elem.text))
+				else:
+					elem_dict[elem.tag] = elem.text.replace("\"", "'")
 
-				elem_dict[elem.tag] = elem.text.replace('"',"'")
-
-		print insert_str
+		#print insert_str
 		cursor.execute(insert_string(element_name, elem_dict))
 
 connection.commit()
