@@ -3,6 +3,8 @@ from schema import schema
 import csv
 import ConfigParser
 
+#TODO: Try/catch around the config calls, just in case file_name and header are missing from a section
+
 ADDRESS_TYPES = ["simpleAddressType", "detailAddressType"]
 REQUIRED_ELEMENTS = ["source", "election", "state", "locality", "precinct", "polling_location", "street_segment"]
 CONFIG_FNAME = "vip.cfg"
@@ -118,6 +120,8 @@ class format_check:
 					self.invalid_files.append(fname)
 
 				self.column_check(section, fname, fieldnames)
+
+			self.valid_files[fname] = section 
 
 		self.missing_files = self.file_list_check(sections)			
 
