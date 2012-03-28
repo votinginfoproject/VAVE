@@ -1,79 +1,181 @@
-import os
-import schema
-import urllib
+from os import listdir
+from schema import schema
 import csv
+import ConfigParser
 
 ADDRESS_TYPES = ["simpleAddressType", "detailAddressType"]
-DIR = "../demo_data/format_check"
 REQUIRED_ELEMENTS = ["source", "election", "state", "locality", "precinct", "polling_location", "street_segment"]
+CONFIG_FNAME = "vip.cfg"
 
-fschema = urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v3.0.xsd")
-schema = schema.schema(fschema)
-ELEMENT_LIST = schema.get_element_list("element", "vip_object")
-addresses = {}
-use_config = False
-report = {"invalid_files":[], "valid_elements":[], "missing_files":[], "invalid_columns":{}}
+class format_check:
 
-for atype in ADDRESS_TYPES:
-	for element in schema.get_elements_of_attribute("type", atype):
-		addresses[element] = {}
-		addresses[element]["type"] = atype
-		addresses[element]["elements"] = schema.get_element_list("complexType", atype)
-
-def get_bad_columns(ename, header):
-
-	bad_columns = []
-
-	for column in header:
-	
-		is_valid = False
-		if column == "id":
-			is_valid = True
-		elif column in schema.get_element_list("element", ename):
-			is_valid = True
-		elif column.endswith("_ids") and column[:-1] in schema.get_element_list("element", ename):
-			is_valid = True
+	def __init__(self, schema_file, directory=""):
+		
+		self.schema = schema(schema_file)
+		self.element_list = self.schema.get_element_list("element","vip_object")
+		self.addresses = self.address_data()
+		if not directory.endswith("/"): #consistency for later file lookups
+			directory += "/"
+		self.directory = directory
+		self.dir_list = listdir(directory)
+		self.invalid_files = []
+		self.missing_files = []
+		self.valid_files = {}
+		self.invalid_columns = {}
+		self.missing_columns = {}
+		self.valid_columns = {}
+		self.invalid_sections = []
+		if self.uses_config():
+			self.validate_with_config()
 		else:
-			for address in addresses:
-				if ename.startswith(address):
-					if ename[len(address)+1:] in address["elements"]:
-						is_valid = True
-					break
-		if is_valid is False:
-			bad_columns.append(column)
+			self.validate()
+
+	def address_data(self):
+
+		addresses = {}
+
+		for atype in ADDRESS_TYPES:
+			for element in self.schema.get_elements_of_attribute("type", atype):
+				addresses[element] = {}
+				addresses[element]["type"] = atype
+				addresses[element]["elements"] = self.schema.get_element_list("complexType", atype)
+		return addresses
+
+	def column_check(self, ename, fname, header):
+		
+		invalid_columns = []
+		valid_columns = []
+
+		for column in header:
+			
+			is_valid = False
+			
+			if column == "id":
+				is_valid = True
+			elif column in self.schema.get_element_list("element", ename):
+				is_valid = True
+			elif column.endswith("_ids") and column[:-1] in self.schema.get_element_list("element", ename):
+				is_valid = True
+			else:
+				for address in self.addresses:
+					if ename.startswith(address):
+						if ename[len(address)+1:] in address["elements"]:
+							is_valid = True
+						break
+			if is_valid is False:
+				invalid_columns.append(column)
+			else:
+				valid_columns.append(column)
 	
-	return bad_columns
+		if len(invalid_columns) > 0:
+			self.invalid_columns[ename] = {"file_name":fname, "elements":invalid_columns}
+		if len(valid_columns) > 0:
+			self.valid_columns[ename] = {"file_name":fname, "elements":valid_columns}
+		for elem in self.schema.get_sub_schema(ename)["elements"]:
+			if ("minOccurs" not in elem or int(elem["minOccurs"]) > 0) and (ename not in self.valid_columns or elem["name"] not in self.valid_columns[ename]["elements"]):
+				if ename not in self.missing_columns:
+					self.missing_columns[ename] = {"file_name":fname, "elements":[]}
+				self.missing_columns[ename]["elements"].append(elem["name"])
 
-dir_list = os.listdir(DIR) #directory file list
-if "vip.cfg" in dir_list:
-	import argparse
-	use_config = True
+	def file_list_check(self, valid_files):
 
-if not use_config:
+		missing_files = []
+		
+		for f in REQUIRED_ELEMENTS:
+			if f not in valid_files:
+				missing_files.append(f)
 
-	for fname in dir_list:
+		return missing_files		
 
-		ename = fname.split(".")[0].lower()
+	def validate_with_config(self):
+		print "validating with config"
+
+		config = ConfigParser.ConfigParser()
+		config.read(self.directory + CONFIG_FNAME)
+		sections = config.sections()
+
+		for section in sections:
+
+			if section not in self.element_list:
+				self.invalid_sections.append(section)
+				continue
+			
+			fname = config.get(section, "file_name")
+
+			if fname not in self.dir_list:
+				self.invalid_files.append(fname)
+				continue
+
+			fieldnames = config.get(section, "header").split(",")
+
+			with open(self.directory+fname) as f:
+
+				data = csv.reader(f)
+
+				if len(data.next()) != len(fieldnames):
+					self.invalid_files.append(fname)
+
+				self.column_check(section, fname, fieldnames)
+
+		self.missing_files = self.file_list_check(sections)			
+
+	def validate(self):
+
+		print "validate w/o config"
+
+		for fname in self.dir_list:
+			
+			ename = fname.split(".")[0].lower()
+			
+			if ename in self.element_list:
 				
-		if ename in ELEMENT_LIST:
-			
-			report["valid_elements"].append(ename)
-			
-			data = csv.DictReader(open(DIR+"/"+fname))
-			header = data.fieldnames
+				self.valid_files[fname] = ename
 
-			bad_columns = get_bad_columns(ename, header)
-		else:
-			report["invalid_files"].append(fname)
-			
-		if len(bad_columns) > 0:
-			report["invalid_columns"][ename] = bad_columns
+				with open(self.directory+fname) as f:
+				
+					data = csv.DictReader(f)
+	
+					self.column_check(ename, fname, data.fieldnames)
 
-for f in REQUIRED_ELEMENTS:
-	if f not in report["valid_elements"]:
-		if "missing_requireds" not in report:
-			report["missing_requireds"] = []
-		report["missing_requireds"].append(f)
-print addresses
+			else:
+				
+				self.invalid_files.append(fname)	
 
-print report
+		self.missing_files = self.file_list_check(self.valid_files.values())
+
+	def uses_config(self):
+		
+		if CONFIG_FNAME in self.dir_list:
+			return True
+		return False
+
+	def valid_files(self):
+		return self.valid_files.keys()
+	
+	def invalid_files(self):
+		return self.invalid_files
+	
+	def missing_files(self):
+		return self.missing_files
+
+	def invalid_sections(self):
+		
+		if self.uses_config():
+			return self.invalid_sections
+		return None
+	
+	def valid_columns(self):
+		return self.valid_columns
+
+	def missing_columns(self):
+		return self.missing_columns
+
+	def invalid_columns(self):
+		return self.invalid_columns	
+
+if __name__ == '__main__':
+	import urllib
+	
+	fschema = urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v3.0.xsd")
+
+	fc = format_check(fschema, "../demo_data/format_check")
