@@ -8,6 +8,7 @@ CONTENT = ["simpleContent"]
 
 #TODO:Schema iterator
 #TODO:Write function to get element/parent combos based on attributes
+#TODO:Bug with "heading" in custom_ballot element because next value is a simpleContent w/o a name
 
 class schema:
 
@@ -273,3 +274,7 @@ if __name__ == '__main__':
 					e_p_with_attr[e["name"]] = {"parents":[elem["name"]]}
 	print e_p_with_attr
 	#also could write a combo on the front end of get_simpleTypes() and get_elements_of_type() using each of the simple types
+
+	print schema.get_sub_schema("custom_ballot")
+
+	print schema.get_element_under_parent("source", "attributes")

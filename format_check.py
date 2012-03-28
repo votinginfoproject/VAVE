@@ -45,37 +45,39 @@ class format_check:
 		
 		invalid_columns = []
 		valid_columns = []
+		elem_schema = self.schema.get_sub_schema(ename)
+		element_list = []
+		required_list = []
+		for element in elem_schema["elements"]:
+			if element["type"] in self.schema.get_complexTypes():
+				for address_element in self.schema.get_element_list("complexType", element["type"]):
+					element_list.append(element["name"]+"_"+address_element)
+			else:
+				element_list.append(element["name"])
+				if "simpleContent" in element:
+					for attrib in element["attributes"]:
+						element_list.append(element["name"]+"_"+attrib["name"])
+				if "minOccurs" not in element or int(element["minOccurs"]) > 0:
+					required_list.append(element["name"])
+		for element in elem_schema["attributes"]:
+			element_list.append(element["name"])
 
 		for column in header:
 			
-			is_valid = False
-			
-			if column == "id":
-				is_valid = True
-			elif column in self.schema.get_element_list("element", ename):
-				is_valid = True
-			elif column.endswith("_ids") and column[:-1] in self.schema.get_element_list("element", ename):
-				is_valid = True
-			else:
-				for address in self.addresses:
-					if ename.startswith(address):
-						if ename[len(address)+1:] in address["elements"]:
-							is_valid = True
-						break
-			if is_valid is False:
-				invalid_columns.append(column)
-			else:
+			if column in element_list:
 				valid_columns.append(column)
+			else:
+				invalid_columns.append(column)
 	
 		if len(invalid_columns) > 0:
 			self.invalid_columns[ename] = {"file_name":fname, "elements":invalid_columns}
 		if len(valid_columns) > 0:
 			self.valid_columns[ename] = {"file_name":fname, "elements":valid_columns}
-		for elem in self.schema.get_sub_schema(ename)["elements"]:
-			if ("minOccurs" not in elem or int(elem["minOccurs"]) > 0) and (ename not in self.valid_columns or elem["name"] not in self.valid_columns[ename]["elements"]):
+		for elem in required_list:
+			if elem not in valid_columns:
 				if ename not in self.missing_columns:
 					self.missing_columns[ename] = {"file_name":fname, "elements":[]}
-				self.missing_columns[ename]["elements"].append(elem["name"])
+				self.missing_columns[ename]["elements"].append(elem)
 
 	def file_list_check(self, valid_files):
 
@@ -149,28 +151,28 @@ class format_check:
 			return True
 		return False
 
-	def valid_files(self):
+	def get_valid_files(self):
 		return self.valid_files.keys()
 	
-	def invalid_files(self):
+	def get_invalid_files(self):
 		return self.invalid_files
 	
-	def missing_files(self):
+	def get_missing_files(self):
 		return self.missing_files
 
-	def invalid_sections(self):
+	def get_invalid_sections(self):
 		
 		if self.uses_config():
 			return self.invalid_sections
 		return None
 	
-	def valid_columns(self):
+	def get_valid_columns(self):
 		return self.valid_columns
 
-	def missing_columns(self):
+	def get_missing_columns(self):
 		return self.missing_columns
 
-	def invalid_columns(self):
+	def get_invalid_columns(self):
 		return self.invalid_columns	
 
 if __name__ == '__main__':
@@ -179,3 +181,12 @@ if __name__ == '__main__':
 	fschema = urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v3.0.xsd")
 
 	fc = format_check(fschema, "../demo_data/format_check")
+
+	print "valid files: " + str(fc.get_valid_files())
+	print "invalid files: " + str(fc.get_invalid_files())
+	print "missing files: " + str(fc.get_missing_files())
+	print "invalid sections: " + str(fc.get_invalid_sections())
+	print "valid columns: " + str(fc.get_valid_columns())
+	print "invalid columns: " + str(fc.get_invalid_columns())
+	print "missing columns: " + str(fc.get_missing_columns())
+	
