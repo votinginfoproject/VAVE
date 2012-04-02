@@ -3,7 +3,8 @@ from schema import schema
 import csv
 import ConfigParser
 
-#TODO: Try/catch around the config calls, just in case file_name and header are missing from a section
+# As a note, this script will not provide a list of files in a directory that
+# are missing from the config file, it will ignore all extraneous files
 
 ADDRESS_TYPES = ["simpleAddressType", "detailAddressType"]
 REQUIRED_ELEMENTS = ["source", "election", "state", "locality", "precinct", "polling_location", "street_segment"]
@@ -26,6 +27,7 @@ class format_check:
 		self.invalid_columns = {}
 		self.missing_columns = {}
 		self.valid_columns = {}
+		self.duplicate_columns = {}
 		self.invalid_sections = []
 		if self.uses_config():
 			self.validate_with_config()
@@ -50,7 +52,8 @@ class format_check:
 		elem_schema = self.schema.get_sub_schema(ename)
 		element_list = []
 		required_list = []
-		for element in elem_schema["elements"]:
+		duplicate_columns = []
+		for element in elem_schema["elements"]: #this logic should probably be part of the schema class, need to add it in the next version
 			if element["type"] in self.schema.get_complexTypes():
 				for address_element in self.schema.get_element_list("complexType", element["type"]):
 					element_list.append(element["name"]+"_"+address_element)
@@ -64,17 +67,25 @@ class format_check:
 		for element in elem_schema["attributes"]:
 			element_list.append(element["name"])
 
-		for column in header:
-			
-			if column in element_list:
-				valid_columns.append(column)
-			else:
-				invalid_columns.append(column)
+		if header and len(header) > 0:
+
+			for column in header:
+				
+				if column in element_list:
+					if column in valid_columns:
+						duplicate_columns.append(column)
+					else:
+						valid_columns.append(column)
+				else:
+					invalid_columns.append(column)
 	
 		if len(invalid_columns) > 0:
 			self.invalid_columns[ename] = {"file_name":fname, "elements":invalid_columns}
 		if len(valid_columns) > 0:
 			self.valid_columns[ename] = {"file_name":fname, "elements":valid_columns}
+		if len(duplicate_columns) > 0:
+			self.duplicate_columns[ename] = {"file_name":fname, "elements": duplicate_columns}
+
 		for elem in required_list:
 			if elem not in valid_columns:
 				if ename not in self.missing_columns:
@@ -103,6 +114,10 @@ class format_check:
 			if section not in self.element_list:
 				self.invalid_sections.append(section)
 				continue
+
+			if not config.has_option(section,"file_name"):
+				self.invalid_sections.append(section)
+				continue
 			
 			fname = config.get(section, "file_name")
 
@@ -110,13 +125,20 @@ class format_check:
 				self.invalid_files.append(fname)
 				continue
 
+			if not config.has_option(section,"header"):
+				self.invalid_sections.append(section)
+				continue
+
 			fieldnames = config.get(section, "header").split(",")
 
 			with open(self.directory+fname) as f:
 
 				data = csv.reader(f)
-
-				if len(data.next()) != len(fieldnames):
+				
+				try:
+					if len(data.next()) != len(fieldnames):
+						self.invalid_files.append(fname)
+				except:
 					self.invalid_files.append(fname)
 
 				self.column_check(section, fname, fieldnames)
@@ -179,12 +201,15 @@ class format_check:
 	def get_invalid_columns(self):
 		return self.invalid_columns	
 
+	def get_duplicate_columns(self):
+		return self.duplicate_columns
+
 if __name__ == '__main__':
 	import urllib
 	
 	fschema = urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v3.0.xsd")
 
-	fc = format_check(fschema, "../demo_data/format_check")
+	fc = format_check(fschema, "../demo_data/format_check3")
 
 	print "valid files: " + str(fc.get_valid_files())
 	print "invalid files: " + str(fc.get_invalid_files())
@@ -193,4 +218,5 @@ if __name__ == '__main__':
 	print "valid columns: " + str(fc.get_valid_columns())
 	print "invalid columns: " + str(fc.get_invalid_columns())
 	print "missing columns: " + str(fc.get_missing_columns())
+	print "duplicate columns: " + str(fc.get_duplicate_columns())
 	
