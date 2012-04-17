@@ -24,24 +24,19 @@ class schema:
 			return element.tag.split('}')[-1]
 
 		def get_simple_type(element):
-			simple_type = {}
-			simple_type["name"] = element.get("name")
-			simple_type["restriction"] = element.getchildren()[0].attrib
-			elements = element.getchildren()[0].getchildren()
-			simple_type["elements"] = []
-			for elem in elements:
-				simple_type["elements"].append(elem.get("value"))
-			return simple_type	
-
+			return {
+				"name": element.get("name"),
+				"restriction": element.getchildren()[0].attrib,
+				"elements": [ e.get("value") for e in element.getchildren()[0].getchildren() ]
+			}
+		
 		def get_simple_content(element):
-			simple_content = {}
-			simple_content["simpleContent"] = {}
-			simple_content["simpleContent"]["extension"] = element.getchildren()[0].attrib
-			simple_content["attributes"] = []
-			attributes = element.getchildren()[0].getchildren()
-			for attribute in attributes:
-				simple_content["attributes"].append(attribute.attrib)
-			return simple_content
+			return {
+				"simpleContent": {
+					"extension": element.getchildren()[0].attrib,
+					"attributes": [ a.attrib for a in element.getchildren()[0].getchildren() ]
+				}
+			}
 
 		def get_elements(element):
 	
@@ -72,13 +67,20 @@ class schema:
 			
 			data["elements"] = []
 			data["attributes"] = []
-			children = element.getchildren()
-			
+			children = element.getchildren()		
+	
 			for child in children:
 				if child.get("name") is not None:
 					data[getXSVal(child)+"s"].append(get_elements(child))
+				elif tag in INDICATORS and getXSVal(child) in INDICATORS:
+					data["elements"].append(get_elements(child))
 				else:
 					data.update(get_elements(child))
+
+			if len(data["elements"]) == 0:
+				del data["elements"]
+			if len(data["attributes"]) == 0:
+				del data["attributes"]
 			
 			return data
 
@@ -92,17 +94,17 @@ class schema:
 			schema[c_type].append(get_elements(child))
 		return schema
 
+	def get_Types(self, t_name):
+		types = []
+		for t in self.schema[t_name]:
+			types.append(t["name"])
+		return types
+
 	def get_simpleTypes(self): #iterate through, return names, could combine with "complex" in separate function
-		simple_types = []
-		for simple in self.schema["simpleType"]:
-			simple_types.append(simple["name"])
-		return simple_types
+		return self.get_Types("simpleType")
 
 	def get_complexTypes(self):
-		complex_types = []
-		for complex_t in self.schema["complexType"]:
-			complex_types.append(complex_t["name"])
-		return complex_types
+		return self.get_Types("complexType")
 
 	def matching_elements(self, element, attribute_name, attribute):
 		
@@ -247,9 +249,9 @@ if __name__ == '__main__':
 	for simple in simples:
 		print schema.get_element_list("simpleType", simple)
 
-	print schema.get_element_under_parent("precinct_split","polling_location_id")
-	print schema.get_element_under_parent("contest","electoral_district_id")
-	print schema.get_element_under_parent("source","electoral_district_id")
+#	print schema.get_element_under_parent("precinct_split","polling_location_id")
+#	print schema.get_element_under_parent("contest","electoral_district_id")
+#	print schema.get_element_under_parent("source","electoral_district_id")
 
 	#print schema.schema["simpleType"]
 	#print schema.schema["complexType"]
@@ -276,5 +278,7 @@ if __name__ == '__main__':
 	#also could write a combo on the front end of get_simpleTypes() and get_elements_of_type() using each of the simple types
 
 	print schema.get_sub_schema("custom_ballot")
+	print schema.get_sub_schema("source")
+	print schema.get_sub_schema("referendum")
 
-	print schema.get_element_under_parent("source", "attributes")
+#	print schema.get_element_under_parent("source", "attributes")
