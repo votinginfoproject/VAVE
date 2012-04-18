@@ -6,6 +6,8 @@ import MySQLdb as mdb
 import psycopg2
 
 #TODO: Add timestamps to relational tables 
+#TODO: Another way to substantially clean up the code would be to create base table
+#	info, then do a select for all tables in the database, and append the columns to each table
 
 TYPE_CONVERSIONS = {	"sqlite3":	{"id":"INTEGER PRIMARY KEY", "xs:string":"TEXT", 
 					"xs:integer":"INTEGER", "xs:dateTime":"TEXT", 
@@ -78,6 +80,7 @@ def create_table(name, elements): #might be more efficient/pythonic to make a ma
 						create_relation_table += "," + sub_e["name"] + " " + TYPE_CONVERSIONS[db_type]["xs:integer"]
 						for attr in sub_e["simpleContent"]["attributes"]:
 							create_relation_table += "," + attr["name"] + " " + TYPE_CONVERSIONS[db_type][attr["type"]]
+						create_relation_table += ", is_used " + TYPE_CONVERSIONS[db_type]["boolean"]
 						create_relation_table += ")"
 						cursor.execute(create_relation_table)
 						connection.commit()
@@ -91,6 +94,7 @@ def create_table(name, elements): #might be more efficient/pythonic to make a ma
 				create_relation_table += "," + e["name"] + " " + TYPE_CONVERSIONS[db_type]["xs:integer"]
 				for attr in e["simpleContent"]["attributes"]:
 					create_relation_table += "," + attr["name"] + " " + TYPE_CONVERSIONS[db_type][attr["type"]]
+				create_relation_table += ", is_used " + TYPE_CONVERSIONS[db_type]["boolean"]
 				create_relation_table += ")"
 				cursor.execute(create_relation_table)
 				connection.commit()
@@ -101,7 +105,8 @@ def create_table(name, elements): #might be more efficient/pythonic to make a ma
 				create_relation_table += ",election_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
 				create_relation_table += ",feed_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
 				create_relation_table += "," + str(name) + "_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-				create_relation_table += "," + e["name"] + " " + TYPE_CONVERSIONS[db_type]["xs:integer"] + ")"
+				create_relation_table += "," + e["name"] + " " + TYPE_CONVERSIONS[db_type]["xs:integer"]
+				create_relation_table += ", is_used " + TYPE_CONVERSIONS[db_type]["boolean"] + ")"
 				cursor.execute(create_relation_table)
 				connection.commit()
 			else:
