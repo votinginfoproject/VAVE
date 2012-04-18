@@ -10,14 +10,14 @@ CONTENT = ["simpleContent"]
 #TODO:Write function to get element/parent combos based on attributes
 #TODO:Bug with "heading" in custom_ballot element because next value is a simpleContent w/o a name
 
-class schema:
+class Schema:
 
 	def __init__(self, schemafile):
-		if schemafile is None:
+
+		try:
+			self.schema = self.create_schema(etree.parse(schemafile))
+		except:
 			print "Error creating Schema: Invalid schema file used"
-			return
-			
-		self.schema = self.create_schema(etree.parse(schemafile))
 	
 	def create_schema(self, schema_data):
 		def getXSVal(element): #removes namespace
@@ -39,7 +39,6 @@ class schema:
 			}
 
 		def get_elements(element):
-	
 	
 			if len(element.getchildren()) == 0:
 				return element.attrib
@@ -67,9 +66,8 @@ class schema:
 			
 			data["elements"] = []
 			data["attributes"] = []
-			children = element.getchildren()		
 	
-			for child in children:
+			for child in element.getchildren():
 				if child.get("name") is not None:
 					data[getXSVal(child)+"s"].append(get_elements(child))
 				elif tag in INDICATORS and getXSVal(child) in INDICATORS:
@@ -86,25 +84,24 @@ class schema:
 
 		schema = {}
 		root = schema_data.getroot()
-		children = root.getchildren()
-		for child in children:
+		
+		for child in root.getchildren():
 			c_type = getXSVal(child)
 			if child.get("name") is not None and not c_type in schema:
-				schema[c_type] = []
-			schema[c_type].append(get_elements(child))
+				schema.setdefault(c_type,[]).append(get_elements(child))
 		return schema
 
-	def get_Types(self, t_name):
+	def get_types(self, t_name):
 		types = []
 		for t in self.schema[t_name]:
 			types.append(t["name"])
 		return types
 
-	def get_simpleTypes(self): #iterate through, return names, could combine with "complex" in separate function
-		return self.get_Types("simpleType")
+	def get_simpleTypes(self): 
+		return self.get_types("simpleType")
 
 	def get_complexTypes(self):
-		return self.get_Types("complexType")
+		return self.get_types("complexType")
 
 	def matching_elements(self, element, attribute_name, attribute):
 		
@@ -230,8 +227,9 @@ class schema:
 
 if __name__ == '__main__':
 	fschema = urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v3.0.xsd")
+#	fschema = open("../demo_data/schema.txt")
 
-	schema = schema(fschema)
+	schema = Schema(fschema)
 
 	simples = schema.get_simpleTypes()
 	print schema.get_simpleTypes()
@@ -277,7 +275,8 @@ if __name__ == '__main__':
 	print e_p_with_attr
 	#also could write a combo on the front end of get_simpleTypes() and get_elements_of_type() using each of the simple types
 
-	print schema.get_sub_schema("custom_ballot")
+	print "custom_ballot: " + str(schema.get_sub_schema("custom_ballot"))
+	print schema.get_sub_schema("ballot")
 	print schema.get_sub_schema("source")
 	print schema.get_sub_schema("referendum")
 

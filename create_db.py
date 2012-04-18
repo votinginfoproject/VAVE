@@ -58,25 +58,38 @@ def create_table(name, elements): #might be more efficient/pythonic to make a ma
 	create_statement += " (id " + TYPE_CONVERSIONS[db_type]["id"]
 	
 	if name not in complex_types:
-		create_statement += ", normalized_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-		create_statement += ", received_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
 		if name != "source":
 			create_statement += ", vip_id " + TYPE_CONVERSIONS[db_type]["int"]
 		if name != "contest":
 			create_statement += ", election_id " + TYPE_CONVERSIONS[db_type]["int"]
+		create_statement += ", feed_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
 		create_statement += ", is_used " + TYPE_CONVERSIONS[db_type]["boolean"]
 
 	for e in elements:
-		if e["name"] == "None":
-			continue
-		if e["type"] == "complexType":
+		if not "name" in e:
+			if "elements" in e:
+				for sub_e in e["elements"]:
+					if "simpleContent" in sub_e:
+						create_relation_table = "CREATE TABLE " + str(name) + "_" + sub_e["name"][:sub_e["name"].find("_id")]
+						create_relation_table += "(vip_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
+						create_relation_table += ",election_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
+						create_relation_table += ",feed_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
+						create_relation_table += "," + str(name) + "_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
+						create_relation_table += "," + sub_e["name"] + " " + TYPE_CONVERSIONS[db_type]["xs:integer"]
+						for attr in sub_e["simpleContent"]["attributes"]:
+							create_relation_table += "," + attr["name"] + " " + TYPE_CONVERSIONS[db_type][attr["type"]]
+						create_relation_table += ")"
+						cursor.execute(create_relation_table)
+						connection.commit()
+		elif e["type"] == "complexType":
 			if "simpleContent" in e:
 				create_relation_table = "CREATE TABLE " + str(name) + "_" + e["name"][:e["name"].find("_id")]
 				create_relation_table += "(vip_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
 				create_relation_table += ",election_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
+				create_relation_table += ",feed_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
 				create_relation_table += "," + str(name) + "_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
 				create_relation_table += "," + e["name"] + " " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-				for attr in e["attributes"]:
+				for attr in e["simpleContent"]["attributes"]:
 					create_relation_table += "," + attr["name"] + " " + TYPE_CONVERSIONS[db_type][attr["type"]]
 				create_relation_table += ")"
 				cursor.execute(create_relation_table)
@@ -86,6 +99,7 @@ def create_table(name, elements): #might be more efficient/pythonic to make a ma
 				create_relation_table = "CREATE TABLE " + str(name) + "_" + e["name"][:e["name"].find("_id")]
 				create_relation_table += "(vip_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
 				create_relation_table += ",election_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
+				create_relation_table += ",feed_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
 				create_relation_table += "," + str(name) + "_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
 				create_relation_table += "," + e["name"] + " " + TYPE_CONVERSIONS[db_type]["xs:integer"] + ")"
 				cursor.execute(create_relation_table)
@@ -168,7 +182,7 @@ elif db_type == "postgres":
 cursor = connection.cursor()
 
 fschema = urllib.urlopen(SCHEMA_URL)
-schema = schema.schema(fschema)
+schema = schema.Schema(fschema)
 
 complex_types = schema.get_complexTypes()
 simple_types = schema.get_simpleTypes()
