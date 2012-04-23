@@ -4,6 +4,7 @@
 #into or out of the database into the feed
 
 from sys import argv
+from csv import DictWriter
 from lxml import etree
 from os.path import exists
 import schema
@@ -27,7 +28,7 @@ elements = root.getchildren()
 element_name = ""
 sub_element_list = []
 write_list = []
-w = None
+w, d = None, None
 
 for element in elements:
 
@@ -37,7 +38,6 @@ for element in elements:
 			element_name = element.tag
 			if w is not None:
 				w.close()
-			w = open(element_name + ".txt", "w")
 			print "writing " + element_name + " elements"
 			write_list = ["id"]
 			sub_element_list = schema.get_element_list("element",element_name)	
@@ -50,7 +50,12 @@ for element in elements:
 						write_list.append(e + "_" + s)
 				else:
 					write_list.append(e)
-			w.write(",".join(write_list) + "\n") #write column headers
+
+			# create an output CSV file and write header row.
+			w = open(element_name + ".txt", "w")
+			d = DictWriter(w, write_list)
+			d.writerow(dict( [(col, col) for col in d.fieldnames] ))
+			
 		element_dict = {}
 		element_dict["id"] = element.get("id")
 			
@@ -65,14 +70,7 @@ for element in elements:
 					element_dict[elem.tag + "_" + add_elem.tag] = add_elem.text
 			else:
 				element_dict[elem.tag] = elem.text
-		write_string = ""
-		for wr in write_list:
-			
-			write_string += '"'
-			
-			if wr in element_dict and element_dict[wr] is not None:
-				write_string += element_dict[wr].replace('"', "'")
-			write_string += '",'
-		write_string = write_string[:-1] + "\n"
-		w.write(write_string)
-
+		
+        # write a single data row to output CSV.
+		row = dict( [(col, element_dict.get(col, None)) for col in d.fieldnames] )
+		d.writerow(row)
