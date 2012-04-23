@@ -34,7 +34,10 @@ for element in elements:
 
 	if element.tag in ELEMENT_LIST:
 
+		# New tag? Prepare a fresh CSV output file for later use.
+		
 		if element.tag != element_name:
+			
 			element_name = element.tag
 			if w is not None:
 				w.close()
@@ -56,6 +59,8 @@ for element in elements:
 			d = DictWriter(w, write_list)
 			d.writerow(dict( [(col, col) for col in d.fieldnames] ))
 			
+		# Generate a list of values for the current element.
+		
 		element_dict = {}
 		element_dict["id"] = element.get("id")
 			
@@ -71,6 +76,7 @@ for element in elements:
 			else:
 				element_dict[elem.tag] = elem.text
 		
-        # write a single data row to output CSV.
+		# Write a single data row to output CSV.
+		
 		row = dict( [(col, element_dict.get(col, None)) for col in d.fieldnames] )
 		d.writerow(row)
