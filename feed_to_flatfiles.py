@@ -4,11 +4,12 @@
 #into or out of the database into the feed
 
 from lxml import etree
+from os.path import exists
 import schema
 import urllib
 
-#fschema = urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v2.3.xsd")
-fschema = open("schema.xsd")
+fschema = exists('schema.xsd') and open('schema.xsd') \
+    or urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v2.3.xsd")
 
 schema = schema.schema(fschema)
 
@@ -16,7 +17,7 @@ simpleAddressTypes = schema.get_elements_of_attribute("type", "simpleAddressType
 detailAddressTypes = schema.get_elements_of_attribute("type", "detailAddressType")
 
 ELEMENT_LIST = schema.get_element_list("element","vip_object")
-fname = 'test_feed.xml'
+fname = 'vipFeed-8.xml'
 
 xmlparser = etree.XMLParser()
 data = etree.parse(open(fname), xmlparser)
