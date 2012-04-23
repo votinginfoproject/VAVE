@@ -3,6 +3,7 @@
 #one option: multiple exports for flat files for the elements with multiple sub elements of the same type, fix was pulled
 #into or out of the database into the feed
 
+from sys import argv
 from lxml import etree
 from os.path import exists
 import schema
@@ -17,7 +18,7 @@ simpleAddressTypes = schema.get_elements_of_attribute("type", "simpleAddressType
 detailAddressTypes = schema.get_elements_of_attribute("type", "detailAddressType")
 
 ELEMENT_LIST = schema.get_element_list("element","vip_object")
-fname = 'vipFeed-8.xml'
+fname = len(argv) >= 1 and argv[1] or 'test_feed.xml'
 
 xmlparser = etree.XMLParser()
 data = etree.parse(open(fname), xmlparser)
