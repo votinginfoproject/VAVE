@@ -3,12 +3,15 @@
 #one option: multiple exports for flat files for the elements with multiple sub elements of the same type, fix was pulled
 #into or out of the database into the feed
 
+from sys import argv
+from csv import DictWriter
 from lxml import etree
+from os.path import exists
 import schema
 import urllib
 
-#fschema = urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v2.3.xsd")
-fschema = open("schema.xsd")
+fschema = exists('schema.xsd') and open('schema.xsd') \
+    or urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v2.3.xsd")
 
 schema = schema.schema(fschema)
 
@@ -16,7 +19,7 @@ simpleAddressTypes = schema.get_elements_of_attribute("type", "simpleAddressType
 detailAddressTypes = schema.get_elements_of_attribute("type", "detailAddressType")
 
 ELEMENT_LIST = schema.get_element_list("element","vip_object")
-fname = 'test_feed.xml'
+fname = len(argv) >= 1 and argv[1] or 'test_feed.xml'
 
 xmlparser = etree.XMLParser()
 data = etree.parse(open(fname), xmlparser)
@@ -25,17 +28,19 @@ elements = root.getchildren()
 element_name = ""
 sub_element_list = []
 write_list = []
-w = None
+w, d = None, None
 
 for element in elements:
 
 	if element.tag in ELEMENT_LIST:
 
+		# New tag? Prepare a fresh CSV output file for later use.
+		
 		if element.tag != element_name:
+			
 			element_name = element.tag
 			if w is not None:
 				w.close()
-			w = open(element_name + ".txt", "w")
 			print "writing " + element_name + " elements"
 			write_list = ["id"]
 			sub_element_list = schema.get_element_list("element",element_name)	
@@ -48,7 +53,14 @@ for element in elements:
 						write_list.append(e + "_" + s)
 				else:
 					write_list.append(e)
-			w.write(",".join(write_list) + "\n") #write column headers
+
+			# create an output CSV file and write header row.
+			w = open(element_name + ".txt", "w")
+			d = DictWriter(w, write_list)
+			d.writerow(dict( [(col, col) for col in d.fieldnames] ))
+			
+		# Generate a list of values for the current element.
+		
 		element_dict = {}
 		element_dict["id"] = element.get("id")
 			
@@ -63,14 +75,8 @@ for element in elements:
 					element_dict[elem.tag + "_" + add_elem.tag] = add_elem.text
 			else:
 				element_dict[elem.tag] = elem.text
-		write_string = ""
-		for wr in write_list:
-			
-			write_string += '"'
-			
-			if wr in element_dict and element_dict[wr] is not None:
-				write_string += element_dict[wr].replace('"', "'")
-			write_string += '",'
-		write_string = write_string[:-1] + "\n"
-		w.write(write_string)
-
+		
+		# Write a single data row to output CSV.
+		
+		row = dict( [(col, element_dict.get(col, None)) for col in d.fieldnames] )
+		d.writerow(row)
