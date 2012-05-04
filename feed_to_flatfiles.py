@@ -1,4 +1,6 @@
+from sys import argv
 from lxml import etree
+from os.path import exists
 import schema
 import urllib
 import os
@@ -7,9 +9,11 @@ from csv import DictWriter
 #TODO: Use etree iterparse
 #TODO: Fix versions (pull schema for correct version of the feed
 #TODO: Clean up "extras" code
-fname = 'large_test.xml'
-fschema = urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v3.0.xsd")
-schema = schema.Schema(fschema)
+
+fschema = exists('schema.xsd') and open('schema.xsd') \
+    or urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v2.3.xsd")
+
+schema = schema.schema(fschema)
 
 simple_elements = schema.get_element_list("complexType", "simpleAddressType")
 detail_elements = schema.get_element_list("complexType", "detailAddressType")
@@ -38,6 +42,8 @@ def get_fields(element_name):
 			e_list.append(a["name"])
 
 	return e_list
+
+fname = len(argv) >= 1 and argv[1] or 'test_feed.xml'
 
 xmlparser = etree.XMLParser()
 data = etree.parse(open(fname), xmlparser)
@@ -98,5 +104,4 @@ for element in elements:
 	element.clear()
 	while elem.getprevious() is not None:
 		del elem.getparent()[0]
-			
 
