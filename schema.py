@@ -8,7 +8,6 @@ CONTENT = ["simpleContent"]
 
 #TODO:Schema iterator
 #TODO:Write function to get element/parent combos based on attributes
-#TODO:Bug with "heading" in custom_ballot element because next value is a simpleContent w/o a name
 
 class Schema:
 
@@ -88,7 +87,9 @@ class Schema:
 		for child in root.getchildren():
 			c_type = getXSVal(child)
 			if child.get("name") is not None and not c_type in schema:
-				schema.setdefault(c_type,[]).append(get_elements(child))
+				schema[c_type] = []
+			schema[c_type].append(get_elements(child))
+		#		schema.setdefault(c_type,[]).append(get_elements(child))
 		return schema
 
 	def get_types(self, t_name):
@@ -111,8 +112,7 @@ class Schema:
 		
 		if "elements" in element:
 			for i in range(len(element["elements"])):
-				subelement = element["elements"][i]
-				element_list.extend(self.matching_elements(subelement, attribute_name, attribute))
+				element_list.extend(self.matching_elements(element["elements"][i], attribute_name, attribute))
 
 		return element_list
 	
@@ -243,16 +243,17 @@ if __name__ == '__main__':
 	print schema.get_element_attributes("feed_contact_id")
 
 	print schema.get_element_list("element", "source")
+	print schema.get_element_list("complexType", "simpleAddressType")
 
 	for simple in simples:
 		print schema.get_element_list("simpleType", simple)
 
-#	print schema.get_element_under_parent("precinct_split","polling_location_id")
-#	print schema.get_element_under_parent("contest","electoral_district_id")
-#	print schema.get_element_under_parent("source","electoral_district_id")
+	print schema.get_element_under_parent("precinct_split","polling_location_id")
+	print schema.get_element_under_parent("contest","electoral_district_id")
+	print schema.get_element_under_parent("source","electoral_district_id")
 
-	#print schema.schema["simpleType"]
-	#print schema.schema["complexType"]
+	print schema.schema["simpleType"]
+	print schema.schema["complexType"]
 
 	simpleContents = {}
 	for elem in schema.schema["element"][0]["elements"]:
@@ -280,4 +281,4 @@ if __name__ == '__main__':
 	print schema.get_sub_schema("source")
 	print schema.get_sub_schema("referendum")
 
-#	print schema.get_element_under_parent("source", "attributes")
+	print schema.get_element_under_parent("source", "attributes")

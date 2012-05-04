@@ -12,17 +12,27 @@ import psycopg2
 TYPE_CONVERSIONS = {	"sqlite3":	{"id":"INTEGER PRIMARY KEY", "xs:string":"TEXT", 
 					"xs:integer":"INTEGER", "xs:dateTime":"TEXT", 
 					"timestamp": "TEXT", "xs:date":"TEXT",
-					"int": "INTEGER", "boolean": "INTEGER"},
+					"int": "INTEGER", "boolean": "INTEGER",
+					"date_created": "DEFAULT CURRENT_TIMESTAMP NOT NULL",
+					"date_modified": "DEFAULT CURRENT_TIMESTAMP NOT NULL"},
 			"mysql":	{"id":"BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY", "xs:string":"VARCHAR(256)", 
 					"xs:integer":"BIGINT", "xs:dateTime":"DATETIME", 
 					"timestamp": "TIMESTAMP", "xs:date":"DATE",
-					"int": "INTEGER", "boolean": "TINYINT(1)"}, 
+					"int": "INTEGER", "boolean": "TINYINT(1)",
+					"date_created": "DEFAULT now() ON UPDATE now()",
+					"date_modified": "DEFAULT '0000-00-00 00:00:00'"}, 
 			"postgres":	{"id":"SERIAL PRIMARY KEY", "xs:string":"VARCHAR(256)", 
 					"xs:integer":"BIGINT", "xs:dateTime":"TIMESTAMP", 
 					"timestamp": "TIMESTAMP", "xs:date":"DATE",
-					"int": "INTEGER", "boolean": "BOOLEAN"}} 
+					"int": "INTEGER", "boolean": "BOOLEAN",
+					"date_created": "DEFAULT CURRENT_TIMESTAMP",
+					"date_modified": "DEFAULT CURRENT_TIMESTAMP"}} 
 
 SCHEMA_URL = "http://election-info-standard.googlecode.com/files/vip_spec_v3.0.xsd"
+
+connect_settings = {'db_type':'sqlite3', 'db_name':'vip',
+			'host':'localhost', 'username':'username',
+			'password':'password'}
 
 trigger_count = 0;
 
@@ -54,6 +64,15 @@ def create_enum(simple, simple_elements):
 	create_statement += "');"
 	cursor.execute(create_statement)
 	connection.commit()
+
+def create_relational_table(name, element):
+	create_relational_table = "CREATE TABLE {0}_{1} ({0}_id {2},{3} {2}".format(str(name), element["name"][:element["name"].find("_id")], TYPE_CONVERSIONS[db_type]["xs:integer"], element["name"])
+	if "simpleContent" in element and "attributes" in element["simpleContent"]:
+		for attr in element["simpleContent"]["attributes"]:
+			create_relational_table = ", {0} {2}".format(attr["name"], TYPE_CONVERSIONS[db_type][attr["type"]])
+	create_relational_table = ")"
+	cursor.execute(create_relational_table)
+	connection.commit()
 	
 def create_table(name, elements): #might be more efficient/pythonic to make a mapping, use names/type added in sync
 	create_statement = "CREATE TABLE " + str(name) 
@@ -70,45 +89,13 @@ def create_table(name, elements): #might be more efficient/pythonic to make a ma
 	for e in elements:
 		if not "name" in e:
 			if "elements" in e:
-				for sub_e in e["elements"]:
-					if "simpleContent" in sub_e:
-						create_relation_table = "CREATE TABLE " + str(name) + "_" + sub_e["name"][:sub_e["name"].find("_id")]
-						create_relation_table += "(vip_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-						create_relation_table += ",election_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-						create_relation_table += ",feed_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-						create_relation_table += "," + str(name) + "_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-						create_relation_table += "," + sub_e["name"] + " " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-						for attr in sub_e["simpleContent"]["attributes"]:
-							create_relation_table += "," + attr["name"] + " " + TYPE_CONVERSIONS[db_type][attr["type"]]
-						create_relation_table += ", is_used " + TYPE_CONVERSIONS[db_type]["boolean"]
-						create_relation_table += ")"
-						cursor.execute(create_relation_table)
-						connection.commit()
+				create_relational_table(name, e["elements"][0])
 		elif e["type"] == "complexType":
 			if "simpleContent" in e:
-				create_relation_table = "CREATE TABLE " + str(name) + "_" + e["name"][:e["name"].find("_id")]
-				create_relation_table += "(vip_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-				create_relation_table += ",election_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-				create_relation_table += ",feed_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-				create_relation_table += "," + str(name) + "_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-				create_relation_table += "," + e["name"] + " " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-				for attr in e["simpleContent"]["attributes"]:
-					create_relation_table += "," + attr["name"] + " " + TYPE_CONVERSIONS[db_type][attr["type"]]
-				create_relation_table += ", is_used " + TYPE_CONVERSIONS[db_type]["boolean"]
-				create_relation_table += ")"
-				cursor.execute(create_relation_table)
-				connection.commit()
+				create_relational_table(name, e)
 		elif e["type"].startswith("xs:"):
 			if "maxOccurs" in e and e["maxOccurs"] == "unbounded":
-				create_relation_table = "CREATE TABLE " + str(name) + "_" + e["name"][:e["name"].find("_id")]
-				create_relation_table += "(vip_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-				create_relation_table += ",election_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-				create_relation_table += ",feed_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-				create_relation_table += "," + str(name) + "_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-				create_relation_table += "," + e["name"] + " " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-				create_relation_table += ", is_used " + TYPE_CONVERSIONS[db_type]["boolean"] + ")"
-				cursor.execute(create_relation_table)
-				connection.commit()
+				create_relational_table(name, e)
 			else:
 				create_statement += ", " + str(e["name"]) 
 				create_statement += " " + TYPE_CONVERSIONS[db_type][e["type"]]
@@ -128,20 +115,8 @@ def create_table(name, elements): #might be more efficient/pythonic to make a ma
 				create_statement += ", " + str(e["name"]) + "_id " 
 				create_statement += TYPE_CONVERSIONS[db_type]["xs:integer"]
 
-	create_statement += ", last_modified " + TYPE_CONVERSIONS[db_type]["timestamp"]
-	if db_type == "sqlite3":
-		create_statement += " DEFAULT CURRENT_TIMESTAMP NOT NULL"
-	elif db_type == "mysql":
-		create_statement += " default now() on update now() "
-	elif db_type == "postgres":
-		create_statement += " DEFAULT CURRENT_TIMESTAMP "
-	create_statement += ", date_created " + TYPE_CONVERSIONS[db_type]["timestamp"]
-	if db_type == "sqlite3":
-		create_statement += " DEFAULT CURRENT_TIMESTAMP NOT NULL"
-	if db_type == "mysql":
-		create_statement += " default '0000-00-00 00:00:00' "
-	elif db_type == "postgres":
-		create_statement += " DEFAULT CURRENT_TIMESTAMP "
+	create_statement += ", last_modified " + TYPE_CONVERSIONS[db_type]["timestamp"] + " " + TYPE_CONVERSIONS[db_type]["date_modified"]
+	create_statement += ", date_created " + TYPE_CONVERSIONS[db_type]["timestamp"] + " " + TYPE_CONVERSIONS[db_type]["date_created"]
 	create_statement += ");"
 
 	cursor.execute(create_statement)		
@@ -157,25 +132,12 @@ def create_table(name, elements): #might be more efficient/pythonic to make a ma
 		connection.commit()
 		trigger_count += 1;
 
-#default settings: 
-db_type = "sqlite3"
-db_name = "vip"
-host = "localhost"
-username = "username"
-password = "password"
 
-parameters = get_parsed_args()
+parameters = vars(get_parsed_args())
 
-if parameters.db_type:
-	db_type = parameters.db_type
-if parameters.db_name:
-	db_name = parameters.db_name
-if parameters.host:
-	host = parameters.host
-if parameters.username:
-	username = parameters.username
-if parameters.password:
-	password = parameters.password
+for p in parameters:
+	if parameters[p] is not None:
+		connect_settings[p] = parameters[p]
 
 if db_type == "sqlite3":
 	connection = sqlite3.connect(host)
