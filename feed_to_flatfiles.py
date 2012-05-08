@@ -1,115 +1,170 @@
 from lxml import etree
-import urllib
-import schema
-import os
+from urllib import urlopen
 from csv import DictWriter
+from copy import copy
+from schema import Schema
+import os
 
-fname = "large_test.xml"
 SCHEMA_URL = "http://election-info-standard.googlecode.com/files/vip_spec_v"
 VALID_VERSIONS = ["2.0","2.1","2.2","2.3","3.0"]
+#TODO: Check that this works for all schema versions
+#TODO: Add a check to make sure the output folder exists, or create it
 
-def get_fields(element_name):
-	subschema = schema.get_sub_schema(element_name)
-	e_list = []
-
-	if "elements" in subschema:
-		for e in subschema["elements"]:
-			if e["type"] == "simpleAddressType":
-				for s_e in simple_elements:
-					e_list.append(e["name"] + "_" + s_e)
-			elif e["type"] == "detailAddressType":
-				for d_e in detail_elements:
-					e_list.append(e["name"] + "_" + d_e)
-			else:
-				e_list.append(e["name"])
-			if "simpleContent" in e:
-				for sc_attrib in e["simpleContent"]["attributes"]:
-					e_list.append(e["name"] + "_" + sc_attrib["name"])
-	if "attributes" in subschema:
-		for a in subschema["attributes"]:
-			e_list.append(a["name"])
-
-	return e_list
-
-def clear_element(element):
-	element.clear()
-	while element.getprevious() is not None:
-		del element.getparent()[0]
+class FeedToFlatFiles:
 	
-def extract_base_elements(context):
-	for event, element in context:
-		if event == "end" and element.tag in ELEMENT_LIST and len(element.getchildren()) > 0:
-			yield element
-			clear_element(element)
-
-
-with open(fname) as xml_doc:
-	
-	context = etree.iterparse(xml_doc, events=("start", "end"))
-	context = iter(context)
-	
-	event, root = context.next()
-	
-	version = root.attrib["schemaVersion"] 
-	if version in VALID_VERSIONS:
-		if version == "2.2":
-			fschema = urllib.urlopen(SCHEMA_URL + version + "a.xsd")
-		else:
-			fschema = urllib.urlopen(SCHEMA_URL + version + ".xsd")		
-
-	schema = schema.Schema(fschema)
-
-	simple_elements = schema.get_element_list("complexType", "simpleAddressType")
-	detail_elements = schema.get_element_list("complexType", "detailAddressType")
-
-	ELEMENT_LIST = schema.get_element_list("element","vip_object")
-
-	elem_fields = {}
-	cur_element = ""
-
-	for element in extract_base_elements(context):
-		if element.tag != cur_element:
-			
-			cur_element = element.tag
+	def __init__(self, feed, output_dir="", schema_file=None):
 		
-			if os.path.exists("flat_files/" + cur_element + ".txt"):
-				dw = DictWriter(open("flat_files/" + cur_element + ".txt", "a"), fieldnames=elem_fields[cur_element])
-			else:
-				elem_fields[cur_element] = get_fields(cur_element)
-				dw = DictWriter(open("flat_files/" + cur_element + ".txt", "w"), fieldnames=elem_fields[cur_element])
-				dw.writeheader()
-				print elem_fields[cur_element]
-				 
-		element_dict = dict.fromkeys(elem_fields[cur_element], '')
-		element_dict["id"] = element.get("id")
+		self.output_dir = output_dir
+		if len(self.output_dir) > 0 and not self.output_dir.endswith("/"):
+			self.output_dir += "/"
+		
+		if schema_file:
+			self.schema = Schema(schema_file)
+		else:
+			self.schema = Schema(self.get_schema(feed))
+
+		self.simple_elements = self.schema.get_element_list("complexType", "simpleAddressType")
+		self.detail_elements = self.schema.get_element_list("complexType", "detailAddressType")
+		self.element_list = self.schema.get_element_list("element","vip_object")
+		self.elem_fields = self.get_fields(self.element_list)
+
+		self.process_feed(feed)
+
+	def get_schema(self, feed):
+		with open(feed) as xml_doc:
+			context = etree.iterparse(xml_doc, events=("start","end"))
+			context = iter(context)
+	
+			event, root = context.next()
+
+			print root.attrib
+	
+			version = root.attrib["schemaVersion"] 
+
+			if version in VALID_VERSIONS and version == "2.2":
+				return urlopen(SCHEMA_URL + version + "a.xsd")
+			elif version in VALID_VERSIONS:
+				return urlopen(SCHEMA_URL + version + ".xsd")		
+			return
+
+	def file_writer(self, e_name):
+
+		output_file = self.output_dir + e_name + ".txt"
+		
+		if os.path.exists(self.output_dir + e_name + ".txt"):
+			return DictWriter(open(output_file, "a"), fieldnames=self.elem_fields[e_name])
+		else:
+			w = DictWriter(open(output_file, "w"), fieldnames=self.elem_fields[e_name])
+			w.writeheader()
+			return w
+
+	def process_sub_elems(self, elem):
+		
+		elem_dict = dict.fromkeys(self.elem_fields[elem.tag], '')
+		elem_dict["id"] = elem.get("id")
 			
-		sub_elements = element.getchildren()
+		sub_elems = elem.getchildren()
 		extras = []
 		
-		for elem in sub_elements:
+		for sub_elem in sub_elems:
 
-			if elem.tag.endswith("address"):
+			if sub_elem.tag.endswith("address"):
 				
-				add_elems = elem.getchildren()
+				add_elems = sub_elem.getchildren()
 				
 				for add_elem in add_elems:
-					element_dict[elem.tag + "_" + add_elem.tag] = add_elem.text
-			elif len(element_dict[elem.tag]) > 0:
-				extras.append({elem.tag:{"val":elem.text, "attributes":elem.attrib}}) 
+					elem_dict[sub_elem.tag + "_" + add_elem.tag] = add_elem.text
+		
+			elif len(elem_dict[sub_elem.tag]) > 0:
+				extras.append({sub_elem.tag:{"val":sub_elem.text, "attributes":sub_elem.attrib}}) 
 			else:
-				element_dict[elem.tag] = elem.text
-		
-		dw.writerow(element_dict)
+				elem_dict[sub_elem.tag] = sub_elem.text
 
-		for row in extras:
-			e_name = row.keys()[0]
-			element_dict[e_name] = row[e_name]["val"]
-			if len(row[e_name]["attributes"]) > 0:
-				for attr in row[e_name]["attributes"]:
-					element_dict[e_name + "_" + attr] = row[e_name]["attributes"][attr]
-			dw.writerow(element_dict)
-			element_dict[e_name] = ""
-			if len(row[e_name]["attributes"]) > 0:
-				for attr in row[e_name]["attributes"]:
-					element_dict[e_name + "_" + attr] = ""
+		return elem_dict, extras
+
+
+	def process_feed(self, feed):
 		
+		with open(feed) as xml_doc:
+
+			context = etree.iterparse(xml_doc, events=("start", "end"))
+			context = iter(context)
+			context.next()		
+
+			e_name = ""
+
+			for elem in self.extract_base_elements(context):
+				if elem.tag != e_name:
+			
+					e_name = elem.tag
+					writer = self.file_writer(e_name)
+		
+				elem_dict, extras = self.process_sub_elems(elem)
+		
+				writer.writerow(elem_dict)
+
+				for row_dict in self.extra_rows(extras, elem_dict):
+					writer.writerow(row_dict)
+
+	def extra_rows(self, extras, elem_dict):
+		
+		for row in extras:
+			
+			temp_dict = copy(elem_dict)
+			
+			e_name = row.keys()[0]
+			temp_dict[e_name] = row[e_name]["val"]
+			
+			if len(row[e_name]["attributes"]) > 0:
+				for attr in row[e_name]["attributes"]:
+					temp_dict[e_name + "_" + attr] = row[e_name]["attributes"][attr]
+			
+			yield temp_dict
+			
+	def get_fields(self, elem_list):
+		
+		field_list = {}
+		
+		for elem_name in elem_list:
+
+			subschema = self.schema.get_sub_schema(elem_name)
+			e_list = []
+
+			if "elements" in subschema:
+				for e in subschema["elements"]:
+					if "name" not in e: #issue with schema version 2.3 that has no name for in simple content
+						continue
+					e_name = e["name"]
+					if e["type"] == "simpleAddressType":
+						for s_e in self.simple_elements:
+							e_list.append(e_name + "_" + s_e)
+					elif e["type"] == "detailAddressType":
+						for d_e in self.detail_elements:
+							e_list.append(e_name + "_" + d_e)
+					else:
+						e_list.append(e_name)
+					if "simpleContent" in e:
+						for sc_attr in e["simpleContent"]["attributes"]:
+							e_list.append(e_name + "_" + sc_attr["name"])
+			if "attributes" in subschema:
+				for a in subschema["attributes"]:
+					e_list.append(a["name"])
+			
+			field_list[elem_name] = []
+			field_list[elem_name] = e_list
+
+		return field_list
+
+	def clear_element(self, element):
+		element.clear()
+		while element.getprevious() is not None:
+			del element.getparent()[0]
+	
+	def extract_base_elements(self, context):
+		for event, element in context:
+			if event == "end" and element.tag in self.element_list and len(element.getchildren()) > 0:
+				yield element
+				self.clear_element(element)
+
+if __name__ == '__main__':
+	test = FeedToFlatFiles('test.xml', "flat_files")
