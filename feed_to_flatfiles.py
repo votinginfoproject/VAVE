@@ -7,8 +7,6 @@ import os
 
 SCHEMA_URL = "http://election-info-standard.googlecode.com/files/vip_spec_v"
 VALID_VERSIONS = ["2.0","2.1","2.2","2.3","3.0"]
-#TODO: Check that this works for all schema versions
-#TODO: Add a check to make sure the output folder exists, or create it
 
 class FeedToFlatFiles:
 	
@@ -17,6 +15,9 @@ class FeedToFlatFiles:
 		self.output_dir = output_dir
 		if len(self.output_dir) > 0 and not self.output_dir.endswith("/"):
 			self.output_dir += "/"
+		 
+		if not os.path.isdir(self.output_dir):
+			os.mkdir(self.output_dir)
 		
 		if schema_file:
 			self.schema = Schema(schema_file)
@@ -37,8 +38,6 @@ class FeedToFlatFiles:
 	
 			event, root = context.next()
 
-			print root.attrib
-	
 			version = root.attrib["schemaVersion"] 
 
 			if version in VALID_VERSIONS and version == "2.2":
@@ -167,4 +166,4 @@ class FeedToFlatFiles:
 				self.clear_element(element)
 
 if __name__ == '__main__':
-	test = FeedToFlatFiles('test.xml', "flat_files")
+	test = FeedToFlatFiles('v3_0.xml', "flat_files")
