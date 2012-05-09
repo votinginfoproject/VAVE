@@ -7,6 +7,7 @@ import zipfile
 import bz2
 import xml.sax
 import csv
+from filetype import FileType
 
 type_mapping = {"gzip":"gz", "bzip2":"bz2", "Zip":"zip", "RAR":"rar", "POSIX tar":"tar"}
 type_list = {"compression":["gz", "bz2"], "archived":["zip", "rar", "tar"]}
@@ -16,6 +17,8 @@ m = magic.Magic()
 class unarchive:
 	
 	def __init__(self, fname, extract_path=os.getcwd()):
+
+		self.ft = FileType()
 	
 		if os.path.isfile(fname):
 			self.fname = fname
@@ -46,41 +49,9 @@ class unarchive:
 	
 		return clean_name
 
-	def get_type(self, fname):
-
-		ftype = m.from_file(fname)
-
-		for k in type_mapping.keys():
-			if k in ftype:
-				return type_mapping[k]
-	
-		#solutions here from http://stackoverflow.com/questions/9084228/python-to-check-if-a-gzipped-file-is-xml-or-csv
-		#and http://stackoverflow.com/questions/2984888/check-if-file-has-a-csv-format-with-python
-		if 'text' in ftype:
-
-			with open(fname, 'rb') as fh:
-
-    				try:
-					xml.sax.parse(fh, xml.sax.ContentHandler())
-					return 'xml'
-				except: # SAX' exceptions are not public
-					pass
-
-				fh.seek(0)
-			
-				try:
-					dialect = csv.Sniffer().sniff(fh.read(1024))
-					return 'csv'
-				except csv.Error:
-					pass
-
-			return 'txt'
-	
-		return "unknown" 
-
 	def unpack(self, fname, extract_path=os.getcwd()):
 	
-		ftype = self.get_type(fname)
+		ftype = self.ft.get_type(fname)
 		base_name = self.get_base_name(fname)
 
 		if os.path.isdir(fname):
