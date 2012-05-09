@@ -5,7 +5,7 @@ from copy import copy
 from schema import Schema
 import os
 
-SCHEMA_URL = "http://election-info-standard.googlecode.com/files/vip_spec_v"
+SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v"
 VALID_VERSIONS = ["2.0","2.1","2.2","2.3","3.0"]
 
 class FeedToFlatFiles:
@@ -40,9 +40,7 @@ class FeedToFlatFiles:
 
 			version = root.attrib["schemaVersion"] 
 
-			if version in VALID_VERSIONS and version == "2.2":
-				return urlopen(SCHEMA_URL + version + "a.xsd")
-			elif version in VALID_VERSIONS:
+			if version in VALID_VERSIONS:
 				return urlopen(SCHEMA_URL + version + ".xsd")		
 			return
 
