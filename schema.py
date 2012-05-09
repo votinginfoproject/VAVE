@@ -13,10 +13,7 @@ class Schema:
 
 	def __init__(self, schemafile):
 
-		try:
-			self.schema = self.create_schema(etree.parse(schemafile))
-		except:
-			print "Error creating Schema: Invalid schema file used"
+		self.schema = self.create_schema(etree.parse(schemafile))
 	
 	def create_schema(self, schema_data):
 		def getXSVal(element): #removes namespace
@@ -83,6 +80,7 @@ class Schema:
 
 		schema = {}
 		root = schema_data.getroot()
+		self.version = root.attrib["version"]
 		
 		for child in root.getchildren():
 			c_type = getXSVal(child)
