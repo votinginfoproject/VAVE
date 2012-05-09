@@ -10,39 +10,64 @@ VALID_VERSIONS = ["2.0","2.1","2.2","2.3","3.0"]
 
 class FeedToFlatFiles:
 	
-	def __init__(self, feed, output_dir="", schema_file=None):
+	def __init__(self, output_dir=os.getcwd(), schema_file=None):
 		
 		self.output_dir = output_dir
-		if len(self.output_dir) > 0 and not self.output_dir.endswith("/"):
+		if not self.output_dir.endswith("/"):
 			self.output_dir += "/"
 		 
-		if not os.path.isdir(self.output_dir):
+		if not os.path.exists(self.output_dir):
 			os.mkdir(self.output_dir)
 		
-		if schema_file:
-			self.schema = Schema(schema_file)
-		else:
-			self.schema = Schema(self.get_schema(feed))
+		self.set_schema_props(schema_file)
 
-		self.simple_elements = self.schema.get_element_list("complexType", "simpleAddressType")
-		self.detail_elements = self.schema.get_element_list("complexType", "detailAddressType")
-		self.element_list = self.schema.get_element_list("element","vip_object")
-		self.elem_fields = self.get_fields(self.element_list)
-
-		self.process_feed(feed)
-
-	def get_schema(self, feed):
-		with open(feed) as xml_doc:
-			context = etree.iterparse(xml_doc, events=("start","end"))
-			context = iter(context)
-	
-			event, root = context.next()
-
-			version = root.attrib["schemaVersion"] 
-
-			if version in VALID_VERSIONS:
-				return urlopen(SCHEMA_URL + version + ".xsd")		
+	def set_schema_props(self, schema_file):
+		
+		if not schema_file:
+			self.schema_version = None
 			return
+
+		schema = Schema(schema_file)
+		
+		self.schema_version = schema.version
+		self.simple_elements = schema.get_element_list("complexType", "simpleAddressType")
+		self.detail_elements = schema.get_element_list("complexType", "detailAddressType")
+		self.element_list = schema.get_element_list("element","vip_object")
+		self.elem_fields = self.get_fields(schema, self.element_list)
+
+	def get_fields(self, schema, elem_list):
+		
+		field_list = {}
+		
+		for elem_name in elem_list:
+
+			subschema = schema.get_sub_schema(elem_name)
+			e_list = []
+
+			if "elements" in subschema:
+				for e in subschema["elements"]:
+					if "name" not in e: 
+						continue
+					e_name = e["name"]
+					if e["type"] == "simpleAddressType":
+						for s_e in self.simple_elements:
+							e_list.append(e_name + "_" + s_e)
+					elif e["type"] == "detailAddressType":
+						for d_e in self.detail_elements:
+							e_list.append(e_name + "_" + d_e)
+					else:
+						e_list.append(e_name)
+					if "simpleContent" in e:
+						for sc_attr in e["simpleContent"]["attributes"]:
+							e_list.append(e_name + "_" + sc_attr["name"])
+			if "attributes" in subschema:
+				for a in subschema["attributes"]:
+					e_list.append(a["name"])
+			
+			field_list[elem_name] = []
+			field_list[elem_name] = e_list
+
+		return field_list
 
 	def file_writer(self, e_name):
 
@@ -86,7 +111,13 @@ class FeedToFlatFiles:
 
 			context = etree.iterparse(xml_doc, events=("start", "end"))
 			context = iter(context)
-			context.next()		
+
+			event, root = context.next()
+			version = root.attrib["schemaVersion"]
+			if not self.schema_version and version in VALID_VERSIONS:
+				self.set_schema_props(urlopen(SCHEMA_URL + version + ".xsd"))
+			elif self.schema_version and self.schema_version != version:
+				self.set_schema_props(urlopen(SCHEMA_URL + version + ".xsd"))
 
 			e_name = ""
 
@@ -118,39 +149,6 @@ class FeedToFlatFiles:
 			
 			yield temp_dict
 			
-	def get_fields(self, elem_list):
-		
-		field_list = {}
-		
-		for elem_name in elem_list:
-
-			subschema = self.schema.get_sub_schema(elem_name)
-			e_list = []
-
-			if "elements" in subschema:
-				for e in subschema["elements"]:
-					if "name" not in e: #issue with schema version 2.3 that has no name for in simple content
-						continue
-					e_name = e["name"]
-					if e["type"] == "simpleAddressType":
-						for s_e in self.simple_elements:
-							e_list.append(e_name + "_" + s_e)
-					elif e["type"] == "detailAddressType":
-						for d_e in self.detail_elements:
-							e_list.append(e_name + "_" + d_e)
-					else:
-						e_list.append(e_name)
-					if "simpleContent" in e:
-						for sc_attr in e["simpleContent"]["attributes"]:
-							e_list.append(e_name + "_" + sc_attr["name"])
-			if "attributes" in subschema:
-				for a in subschema["attributes"]:
-					e_list.append(a["name"])
-			
-			field_list[elem_name] = []
-			field_list[elem_name] = e_list
-
-		return field_list
 
 	def clear_element(self, element):
 		element.clear()
@@ -164,4 +162,5 @@ class FeedToFlatFiles:
 				self.clear_element(element)
 
 if __name__ == '__main__':
-	test = FeedToFlatFiles('v3_0.xml', "flat_files")
+	ftff = FeedToFlatFiles("flat_files")
+	ftff.process_feed("v2_1.xml")
