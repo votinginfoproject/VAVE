@@ -224,7 +224,7 @@ class Schema:
 			
 
 if __name__ == '__main__':
-	fschema = urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v3.0.xsd")
+	fschema = urllib.urlopen("https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd")
 #	fschema = open("../demo_data/schema.txt")
 
 	schema = Schema(fschema)
