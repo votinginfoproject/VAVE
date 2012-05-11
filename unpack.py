@@ -16,13 +16,15 @@ class Unpack:
 
 		self.extract_path = extract_path
 
-		if os.path.exists(file_name) and self.extract_path:
+		if os.path.exists(file_name) and self.extract_path and not os.path.exists(self.extract_path):
 			os.makedirs(self.extract_path)
 
 		if os.path.isdir(file_name) and self.extract_path:
-			shutil.copytree(file_name, extract_path)
+			shutil.copytree(file_name, self.extract_path)
+			file_name = self.extract_path
 		elif os.path.isfile(file_name) and self.extract_path:
-			shutil.copy(file_name, extract_path)
+			shutil.copy(file_name, self.extract_path)
+			file_name = self.extract_path
 		elif os.path.isdir(file_name):
 			self.extract_path = file_name
 		else:
@@ -155,10 +157,23 @@ class Unpack:
 		if len(folder_list) > 0:
 			return folder_list
 
-#TODO:Write def flatten_folder():
+	def flatten_folder(self):
 	
+		try:
+			if self.extract_path == os.getcwd():
+				raise SameDirError
+		except SameDirError:
+			raise
+		
+		for root, dirs, files in os.walk(self.extract_path):
+			if root != self.extract_path:
+				for name in files:
+					shutil.move(root + "/" + name, self.extract_path + "/" + name)
+		for root, dirs, files in os.walk(self.extract_path):
+			for d in dirs:
+				shutil.rmtree(os.path.join(root, d))
+		
 if __name__ == '__main__':
-	unpack = Unpack("directory1")
+	unpack = Unpack("test.zip", "test_unpack")
 	print unpack.find_files_by_extension(".xml")
-	print unpack.find_files_by_partial("state")
-	print unpack.find_files_by_name("wtf.txt")
+	unpack.flatten_folder()
