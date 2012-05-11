@@ -8,8 +8,6 @@ from zipfile import ZipFile
 import tarfile
 import re
 
-ft = FileType()
-
 class Unpack:
 
 	def __init__(self, file_name, extract_path=None):
@@ -128,6 +126,10 @@ class Unpack:
 		if len(file_list) > 0:
 			return file_list
 
+	def get_file_list(self):
+		
+		return self.find_files(re.compile(".*"))
+
 	def find_folder_by_name(self, folder_name):
 
 		return self.find_folder(re.compile(folder_name))
@@ -142,16 +144,16 @@ class Unpack:
 			for dir_name in dirs:
 				if regex.match(dir_name) and dir_name.find("/.") < 0:
 					return root + "/" + dir_name
-	def get_file_list(self):
-		
-		file_list = []
-		
+
+	def get_folder_list(self):
+
+		folder_list= []
+
 		for root, dirs, dirfiles in os.walk(self.extract_path):
-			for name in dirfiles:
-				file_list.append(root + "/" + name)
-		
-		if len(file_list) > 0:
-			return file_list
+			for dir_name in dirs:
+				return folder_list.append(root + "/" + dir_name)
+		if len(folder_list) > 0:
+			return folder_list
 
 #TODO:Write def flatten_folder():
 	
