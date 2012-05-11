@@ -40,12 +40,20 @@ class FileType:
 
             return 'txt'
 
-    def is_compression(self, ftype):
+    def is_compression(self, fname):
+        ftype = self.get_type(fname)
+        return self.is_compression_by_type(ftype)
+
+    def is_compression_by_type(self, ftype):
         if ftype in COMPRESSION:
             return True
         return False
 	
-    def is_archived(self, ftype):
+    def is_archived(self, fname):
+        ftype = self.get_type(fname)
+        return self.is_archived_by_type(ftype)
+
+    def is_archived_by_type(self, ftype):
         if ftype in ARCHIVED:
             return True
         return False
