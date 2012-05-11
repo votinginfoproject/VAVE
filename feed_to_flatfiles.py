@@ -12,14 +12,16 @@ class FeedToFlatFiles:
 	
 	def __init__(self, output_dir=os.getcwd(), schema_file=None):
 		
+		self.set_output_dir(output_dir)
+		
+		self.set_schema_props(schema_file)
+
+	def set_output_dir(self, output_dir=os.getcwd()):
 		self.output_dir = output_dir
 		if not self.output_dir.endswith("/"):
 			self.output_dir += "/"
-		 
 		if not os.path.exists(self.output_dir):
 			os.mkdir(self.output_dir)
-		
-		self.set_schema_props(schema_file)
 
 	def set_schema_props(self, schema_file):
 		
@@ -105,7 +107,10 @@ class FeedToFlatFiles:
 		return elem_dict, extras
 
 
-	def process_feed(self, feed):
+	def process_feed(self, feed, output_dir=None):
+
+		if output_dir:
+			self.set_output_dir(output_dir)
 		
 		with open(feed) as xml_doc:
 
