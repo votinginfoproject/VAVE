@@ -3,14 +3,11 @@ from schema import schema
 import csv
 import ConfigParser
 
-# As a note, this script will not provide a list of files in a directory that
-# are missing from the config file, it will ignore all extraneous files
-
 ADDRESS_TYPES = ["simpleAddressType", "detailAddressType"]
 REQUIRED_ELEMENTS = ["source", "election", "state", "locality", "precinct", "polling_location", "street_segment"]
 CONFIG_FNAME = "vip.cfg"
 
-class format_check:
+class DetailedFormatCheck:
 
 	def __init__(self, schema_file, directory=""):
 		
@@ -209,7 +206,7 @@ if __name__ == '__main__':
 	
 	fschema = urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v3.0.xsd")
 
-	fc = format_check(fschema, "../demo_data/format_check3")
+	fc = format_check(fschema, "../format_check")
 
 	print "valid files: " + str(fc.get_valid_files())
 	print "invalid files: " + str(fc.get_invalid_files())

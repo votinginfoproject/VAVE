@@ -6,7 +6,7 @@ import os
 REQUIRED_ELEMENTS = ["source", "election"]
 CONFIG_FNAME = "vip.cfg"
 
-class SimpleFormatCheck:
+class FormatCheck:
 
 	def __init__(self, schema_file, directory=os.getcwd()):
 
@@ -71,7 +71,7 @@ class SimpleFormatCheck:
 		missing = []
 
 		for r in REQUIRED_ELEMENTS:
-			if r not in self.valid_files.vals():
+			if r not in self.valid_files.values():
 				missing.append(r)
 		return missing
 
@@ -166,6 +166,41 @@ class SimpleFormatCheck:
 				return False
 		return True
 
+	def clean_files(self):
+	
+		file_list = os.listdir(self.directory)
+
+		if CONFIG_FNAME in file_list:
+			return self.clean_w_config(file_list)
+		else:
+			return self.clean_wo_config(file_list)
+
+	def clean_wo_config(self, file_list):
+	
+		for f in file_list:
+			if f in self.invalid_files.keys():
+				os.remove(self.directory + f)
+			elif f in self.valid_files.keys():
+				os.rename(self.directory + f, self.directory + valid_files[f] + ".txt")
+
+	def clean_w_config(self, file_list):
+		
+		config = ConfigParser()
+		config.read(self.directory + CONFIG_FNAME)
+
+		for f in file_list:
+			if f in self.invalid_files.keys():
+				os.remove(self.directory + f)
+			elif f in self.valid_files.keys():
+				ename = self.valid_files[f]
+				with open(self.directory + ename + "_temp.txt", "w") as fw:
+					fw.write(config.get(ename, "header") + "\n")
+					with open(self.directory + f, "r") as fr:
+						for line in fr:
+							fw.write(line)
+					os.remove(self.directory + f)
+				os.rename(self.directory + ename + "_temp.txt", self.directory + ename + ".txt")
+
 if __name__ == '__main__':
 	from urllib import urlopen
 	
@@ -176,3 +211,5 @@ if __name__ == '__main__':
 	print fc.get_valid_files()
 	print fc.get_invalid_files()
 	print fc.missing_files()
+	fc.clean_files()
+	
