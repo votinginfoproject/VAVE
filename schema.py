@@ -67,7 +67,7 @@ class Schema:
 				if child.get("name") is not None:
 					data[getXSVal(child)+"s"].append(get_elements(child))
 				elif tag in INDICATORS and getXSVal(child) in INDICATORS:
-					data["elements"].append(get_elements(child))
+					data["elements"].append(get_elements(child.getchildren()[0]))
 				else:
 					data.update(get_elements(child))
 
