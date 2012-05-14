@@ -16,7 +16,7 @@ class FeedToFlatFiles:
 		
 		self.set_schema_props(schema_file)
 
-	def set_output_dir(self, output_dir=os.getcwd()):
+	def set_output_dir(self, output_dir):
 		self.output_dir = output_dir
 		if not self.output_dir.endswith("/"):
 			self.output_dir += "/"
