@@ -6,7 +6,7 @@ from schema import Schema
 import os
 
 SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v"
-VALID_VERSIONS = ["2.0","2.1","2.2","2.3","3.0"]
+VALID_VERSIONS = ["2.1","2.2","2.3","3.0"]
 
 class FeedToFlatFiles:
 	
