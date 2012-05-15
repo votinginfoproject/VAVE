@@ -8,33 +8,35 @@ import psycopg2
 #TODO: Add timestamps to relational tables 
 #TODO: Another way to substantially clean up the code would be to create base table
 #	info, then do a select for all tables in the database, and append the columns to each table
+#alternative is to change "xs:" to "xml_"
 
-TYPE_CONVERSIONS = {	"sqlite3":	{"id":"INTEGER PRIMARY KEY", "xs:string":"TEXT", 
-					"xs:integer":"INTEGER", "xs:dateTime":"TEXT", 
-					"timestamp": "TEXT", "xs:date":"TEXT",
+TYPE_CONVERSIONS = {	"sqlite3":	{"id":"INTEGER PRIMARY KEY", "xml_string":"TEXT", 
+					"xml_integer":"INTEGER", "xml_dateTime":"TEXT", 
+					"timestamp": "TEXT", "xml_date":"TEXT",
 					"int": "INTEGER", "boolean": "INTEGER",
 					"date_created": "DEFAULT CURRENT_TIMESTAMP NOT NULL",
 					"date_modified": "DEFAULT CURRENT_TIMESTAMP NOT NULL"},
-			"mysql":	{"id":"BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY", "xs:string":"VARCHAR(256)", 
-					"xs:integer":"BIGINT", "xs:dateTime":"DATETIME", 
-					"timestamp": "TIMESTAMP", "xs:date":"DATE",
+			"mysql":	{"id":"BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY", "xml_string":"VARCHAR(256)", 
+					"xml_integer":"BIGINT", "xml_dateTime":"DATETIME", 
+					"timestamp": "TIMESTAMP", "xml_date":"DATE",
 					"int": "INTEGER", "boolean": "TINYINT(1)",
 					"date_created": "DEFAULT now() ON UPDATE now()",
 					"date_modified": "DEFAULT '0000-00-00 00:00:00'"}, 
-			"postgres":	{"id":"SERIAL PRIMARY KEY", "xs:string":"VARCHAR(256)", 
-					"xs:integer":"BIGINT", "xs:dateTime":"TIMESTAMP", 
-					"timestamp": "TIMESTAMP", "xs:date":"DATE",
+			"postgres":	{"id":"SERIAL PRIMARY KEY", "xml_string":"VARCHAR(256)", 
+					"xml_integer":"BIGINT", "xml_dateTime":"TIMESTAMP", 
+					"timestamp": "TIMESTAMP", "xml_date":"DATE",
 					"int": "INTEGER", "boolean": "BOOLEAN",
 					"date_created": "DEFAULT CURRENT_TIMESTAMP",
 					"date_modified": "DEFAULT CURRENT_TIMESTAMP"}} 
 
-SCHEMA_URL = "http://election-info-standard.googlecode.com/files/vip_spec_v3.0.xsd"
+SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
 
-connect_settings = {'db_type':'sqlite3', 'db_name':'vip',
-			'host':'localhost', 'username':'username',
-			'password':'password'}
-
-trigger_count = 0;
+#default settings
+db_type = "sqlite3"
+host = "localhost"
+db_name = "vip"
+username = "username"
+password = "password"
 
 def get_parsed_args():
 	parser = argparse.ArgumentParser(description='create database from schema')
@@ -56,35 +58,45 @@ def get_parsed_args():
 
 	return parser.parse_args()
 
+def timestamp_fields():
+	return ", last_modified {timestamp} {date_modified}, date_created {timestamp} {date_created}"
+	
 def create_enum(simple, simple_elements):
 	simple_elements = list(set(e.lower() for e in simple_elements)) #eliminate case from enums
 	create_statement = "CREATE TYPE " + str(simple) 
-	create_statement += " AS ENUM('" 
-	create_statement += "','".join(simple_elements)
-	create_statement += "');"
+	create_statement += " AS ENUM('" + "','".join(simple_elements) + "');"
 	cursor.execute(create_statement)
 	connection.commit()
 
 def create_relational_table(name, element):
-	create_relational_table = "CREATE TABLE {0}_{1} ({0}_id {2},{3} {2}".format(str(name), element["name"][:element["name"].find("_id")], TYPE_CONVERSIONS[db_type]["xs:integer"], element["name"])
+
+	ename1 = name
+	ename2 = element["name"][:element["name"].find("_id")]
+
+	create_statement = "CREATE TABLE " + ename1 + "_" + ename2
+	create_statement += " (" + ename1 + "_id {xml_integer}, "
+	create_statement += ename2 + "_id {xml_integer}"
+
 	if "simpleContent" in element and "attributes" in element["simpleContent"]:
 		for attr in element["simpleContent"]["attributes"]:
-			create_relational_table = ", {0} {2}".format(attr["name"], TYPE_CONVERSIONS[db_type][attr["type"]])
-	create_relational_table = ")"
-	cursor.execute(create_relational_table)
+			create_statement += ", " + attr["name"] + " {" + attr["type"] + "}"
+
+	create_statement += timestamp_fields() + ")"
+	create_statement = create_statement.replace("xs:", "xml_")
+	create_statement = create_statement.format(**TYPE_CONVERSIONS[db_type])
+	cursor.execute(create_statement)
 	connection.commit()
 	
-def create_table(name, elements): #might be more efficient/pythonic to make a mapping, use names/type added in sync
-	create_statement = "CREATE TABLE " + str(name) 
-	create_statement += " (id " + TYPE_CONVERSIONS[db_type]["id"]
+def create_table(name, elements): 
+	create_statement = "CREATE TABLE " + str(name) + " (id {id}"
 	
 	if name not in complex_types:
 		if name != "source":
-			create_statement += ", vip_id " + TYPE_CONVERSIONS[db_type]["int"]
+			create_statement += ", vip_id {int}"
 		if name != "contest":
-			create_statement += ", election_id " + TYPE_CONVERSIONS[db_type]["int"]
-		create_statement += ", feed_id " + TYPE_CONVERSIONS[db_type]["xs:integer"]
-		create_statement += ", is_used " + TYPE_CONVERSIONS[db_type]["boolean"]
+			create_statement += ", election_id {int}"
+		create_statement += ", feed_id {xml_integer}"
+		create_statement += ", is_used {boolean}"
 
 	for e in elements:
 		if not "name" in e:
@@ -97,11 +109,10 @@ def create_table(name, elements): #might be more efficient/pythonic to make a ma
 			if "maxOccurs" in e and e["maxOccurs"] == "unbounded":
 				create_relational_table(name, e)
 			else:
-				create_statement += ", " + str(e["name"]) 
-				create_statement += " " + TYPE_CONVERSIONS[db_type][e["type"]]
+				create_statement += ", " + e["name"] + " {" + e["type"] + "}"
 		else:
 			if e["type"] in simple_types:
-				create_statement += ", " + str(e["name"])
+				create_statement += ", " + e["name"]
 				if db_type == "sqlite3":
 					create_statement += " TEXT"
 				elif db_type == "mysql":
@@ -112,35 +123,49 @@ def create_table(name, elements): #might be more efficient/pythonic to make a ma
 				elif db_type == "postgres":
 					create_statement += " " + e["type"]	
 			elif e["type"] in complex_types:
-				create_statement += ", " + str(e["name"]) + "_id " 
-				create_statement += TYPE_CONVERSIONS[db_type]["xs:integer"]
+				create_statement += ", " + e["name"] + "_id {xml_integer}" 
 
-	create_statement += ", last_modified " + TYPE_CONVERSIONS[db_type]["timestamp"] + " " + TYPE_CONVERSIONS[db_type]["date_modified"]
-	create_statement += ", date_created " + TYPE_CONVERSIONS[db_type]["timestamp"] + " " + TYPE_CONVERSIONS[db_type]["date_created"]
-	create_statement += ");"
+	create_statement += timestamp_fields() + ");"
+	create_statement = create_statement.replace("xs:", "xml_")
+	create_statement = create_statement.format(**TYPE_CONVERSIONS[db_type])
 
 	cursor.execute(create_statement)		
 	connection.commit()
+
+def create_triggers():
 	if db_type == "postgres":
 		create_trigger = "CREATE OR REPLACE FUNCTION update_last_modified() RETURNS TRIGGER AS $$ BEGIN NEW.lastmodified = NOW(); RETURN NEW; END; $$ LANGUAGE 'plpgsql'";
 		cursor.execute(create_trigger)
 		connection.commit()
 	elif db_type == "sqlite3":
-		global trigger_count
-		create_trigger = "CREATE TRIGGER update_last_modified" + str(trigger_count) + " AFTER INSERT ON " + str(name) + " BEGIN UPDATE " + str(name) + " SET last_modified = datetime('now') WHERE id = new." + str(name) + "; END;"
-		cursor.execute(create_trigger)
-		connection.commit()
-		trigger_count += 1;
+		trigger_count = 0
+		cursor.execute("SELECT * FROM sqlite_master WHERE type='table'")
 
+		table_list = []
+		for c in cursor:
+			table_list.append(c[1])
+		for table in table_list:
+			create_trigger = "CREATE TRIGGER update_last_modified{0} AFTER INSERT ON {1} BEGIN UPDATE {1} SET last_modified = datetime('now') WHERE id = new.{1}; END;".format(trigger_count, table)
+			cursor.execute(create_trigger)
+			connection.commit()
+			trigger_count += 1;
 
-parameters = vars(get_parsed_args())
+parameters = get_parsed_args()
 
-for p in parameters:
-	if parameters[p] is not None:
-		connect_settings[p] = parameters[p]
+if parameters.db_type:
+	db_type = parameters.db_type
+if parameters.host:
+	host = parameters.host
+if parameters.db_name:
+	db_name = parameters.db_name
+if parameters.username:
+	username = parameters.username
+if parameters.password:
+	password = parameters.password
 
 if db_type == "sqlite3":
 	connection = sqlite3.connect(host)
+	connection.row_factory = sqlite3.Row
 elif db_type == "mysql":
 	connection = mdb.connect(host, username, password, db_name)
 elif db_type == "postgres":
@@ -160,7 +185,13 @@ if db_type == "postgres":
 		create_enum(simple, schema.get_element_list("simpleType", simple))
 
 for complex_t in complex_types:
-	create_table(complex_t, schema.get_sub_schema(complex_t)["elements"])
+	
+	sub_schema = schema.get_sub_schema(complex_t)
+	if "elements" in sub_schema:
+		create_table(complex_t, sub_schema["elements"])
 
 for element in elements:
 	create_table(element, schema.get_sub_schema(element)["elements"])
+
+if db_type == "postgres" or db_type == "sqlite3":
+	create_triggers()
