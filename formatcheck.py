@@ -200,13 +200,27 @@ class FormatCheck:
 							fw.write(line)
 					os.remove(self.directory + f)
 				os.rename(self.directory + ename + "_temp.txt", self.directory + ename + ".txt")
+	
+	def get_vip_id(self):
+
+		try:
+			with open('source.txt', 'rb') as dr:
+				r = csv.DictReader(dr)
+				row = dr.next()
+				return row["vip_id"]
+		except:
+			pass
+
+	def validate_and_clean(self):
+		self.validate_files()
+		self.clean_files()
 
 if __name__ == '__main__':
 	from urllib import urlopen
 	
 	fschema = urlopen("https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd")
 
-	fc = SimpleFormatCheck(fschema, "../format_check")
+	fc = FormatCheck(fschema, "../format_check")
 	print fc.validate_files()
 	print fc.get_valid_files()
 	print fc.get_invalid_files()
