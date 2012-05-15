@@ -7,6 +7,7 @@ import csv
 
 
 #TODO: accomodate for sort_order as part of the relational tables
+#TODO: change to github url
 fschema = urllib.urlopen("http://election-info-standard.googlecode.com/files/vip_spec_v3.0.xsd")
 #fschema = open("schema.xsd")
 
