@@ -48,8 +48,6 @@ class FeedToFlatFiles:
 
 			if "elements" in subschema:
 				for e in subschema["elements"]:
-					if "name" not in e: 
-						continue
 					e_name = e["name"]
 					if e["type"] == "simpleAddressType":
 						for s_e in self.simple_elements:
