@@ -131,7 +131,6 @@ def create_table(name, elements):
 	create_statement += ")"
 	create_statement = create_statement.replace("xs:", "xml_")
 	create_statement = create_statement.format(**TYPE_CONVERSIONS[db_type])
-	print create_statement
 
 	cursor.execute(create_statement)		
 	connection.commit()
