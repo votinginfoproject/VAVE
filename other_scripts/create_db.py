@@ -1,16 +1,14 @@
-import argparse
-import urllib
-import schema
+from argparse import ArgumentParser
+from urllib import urlopen
+from schema import Schema
 import sqlite3
 import MySQLdb as mdb
 import psycopg2
 
-#TODO: Add timestamps to relational tables 
-#TODO: Another way to substantially clean up the code would be to create base table
-#	info, then do a select for all tables in the database, and append the columns to each table
-#alternative is to change "xs:" to "xml_"
+#for string formatting, "xs:" changes to "xml_" because ":" within format
+#interprets the format statement as a range
 
-TYPE_CONVERSIONS = {	"sqlite3":	{"id":"INTEGER PRIMARY KEY", "xml_string":"TEXT", 
+TYPE_CONVERSIONS = {	"sqlite":	{"id":"INTEGER PRIMARY KEY AUTOINCREMENT", "xml_string":"TEXT", 
 					"xml_integer":"INTEGER", "xml_dateTime":"TEXT", 
 					"timestamp": "TEXT", "xml_date":"TEXT",
 					"int": "INTEGER", "boolean": "INTEGER",
@@ -32,17 +30,17 @@ TYPE_CONVERSIONS = {	"sqlite3":	{"id":"INTEGER PRIMARY KEY", "xml_string":"TEXT"
 SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
 
 #default settings
-db_type = "sqlite3"
+db_type = "sqlite"
 host = "localhost"
 db_name = "vip"
 username = "username"
 password = "password"
 
 def get_parsed_args():
-	parser = argparse.ArgumentParser(description='create database from schema')
+	parser = ArgumentParser(description='create database from schema')
 
 	parser.add_argument('-d', action='store', dest='db_type',
-			help='database type, valid types are: sqlite3, mysql, postgres')
+			help='database type, valid types are: sqlite, mysql, postgres')
 
 	parser.add_argument('-u', action='store', dest='username',
 			help='username to access the database')
@@ -54,13 +52,13 @@ def get_parsed_args():
 			help='database name the data is stored in')
 
 	parser.add_argument('-host', action='store', dest='host',
-			help='database host address, database file location using sqlite3')
+			help='database host address, database file location using sqlite')
 
 	return parser.parse_args()
 
 def timestamp_fields():
 	return ", last_modified {timestamp} {date_modified}, date_created {timestamp} {date_created}"
-	
+
 def create_enum(simple, simple_elements):
 	simple_elements = list(set(e.lower() for e in simple_elements)) #eliminate case from enums
 	create_statement = "CREATE TYPE " + str(simple) 
@@ -74,14 +72,16 @@ def create_relational_table(name, element):
 	ename2 = element["name"][:element["name"].find("_id")]
 
 	create_statement = "CREATE TABLE " + ename1 + "_" + ename2
-	create_statement += " (" + ename1 + "_id {xml_integer}, "
+	create_statement += " ( id {id}, vip_id {int}, election_id {int}"
+	create_statement += "," + ename1 + "_id {xml_integer}, "
 	create_statement += ename2 + "_id {xml_integer}"
 
 	if "simpleContent" in element and "attributes" in element["simpleContent"]:
 		for attr in element["simpleContent"]["attributes"]:
 			create_statement += ", " + attr["name"] + " {" + attr["type"] + "}"
 
-	create_statement += timestamp_fields() + ")"
+	create_statement += timestamp_fields()
+	create_statement += ", UNIQUE(vip_id, election_id, " + ename1 + "_id, " + ename2 + "_id))"
 	create_statement = create_statement.replace("xs:", "xml_")
 	create_statement = create_statement.format(**TYPE_CONVERSIONS[db_type])
 	cursor.execute(create_statement)
@@ -113,7 +113,7 @@ def create_table(name, elements):
 		else:
 			if e["type"] in simple_types:
 				create_statement += ", " + e["name"]
-				if db_type == "sqlite3":
+				if db_type == "sqlite":
 					create_statement += " TEXT"
 				elif db_type == "mysql":
 					simple_elements = list(set(elem.lower() for elem in schema.get_element_list("simpleType", e["type"])))
@@ -125,9 +125,13 @@ def create_table(name, elements):
 			elif e["type"] in complex_types:
 				create_statement += ", " + e["name"] + "_id {xml_integer}" 
 
-	create_statement += timestamp_fields() + ");"
+	create_statement += timestamp_fields()
+	if name not in complex_types:
+		create_statement += ", UNIQUE(vip_id, election_id, feed_id)"
+	create_statement += ")"
 	create_statement = create_statement.replace("xs:", "xml_")
 	create_statement = create_statement.format(**TYPE_CONVERSIONS[db_type])
+	print create_statement
 
 	cursor.execute(create_statement)		
 	connection.commit()
@@ -137,7 +141,7 @@ def create_triggers():
 		create_trigger = "CREATE OR REPLACE FUNCTION update_last_modified() RETURNS TRIGGER AS $$ BEGIN NEW.lastmodified = NOW(); RETURN NEW; END; $$ LANGUAGE 'plpgsql'";
 		cursor.execute(create_trigger)
 		connection.commit()
-	elif db_type == "sqlite3":
+	elif db_type == "sqlite":
 		trigger_count = 0
 		cursor.execute("SELECT * FROM sqlite_master WHERE type='table'")
 
@@ -145,6 +149,8 @@ def create_triggers():
 		for c in cursor:
 			table_list.append(c[1])
 		for table in table_list:
+			if table.startswith(db_type):
+				continue
 			create_trigger = "CREATE TRIGGER update_last_modified{0} AFTER INSERT ON {1} BEGIN UPDATE {1} SET last_modified = datetime('now') WHERE id = new.{1}; END;".format(trigger_count, table)
 			cursor.execute(create_trigger)
 			connection.commit()
@@ -163,7 +169,7 @@ if parameters.username:
 if parameters.password:
 	password = parameters.password
 
-if db_type == "sqlite3":
+if db_type == "sqlite":
 	connection = sqlite3.connect(host)
 	connection.row_factory = sqlite3.Row
 elif db_type == "mysql":
@@ -173,8 +179,8 @@ elif db_type == "postgres":
 
 cursor = connection.cursor()
 
-fschema = urllib.urlopen(SCHEMA_URL)
-schema = schema.Schema(fschema)
+fschema = urlopen(SCHEMA_URL)
+schema = Schema(fschema)
 
 complex_types = schema.get_complexTypes()
 simple_types = schema.get_simpleTypes()
@@ -193,5 +199,5 @@ for complex_t in complex_types:
 for element in elements:
 	create_table(element, schema.get_sub_schema(element)["elements"])
 
-if db_type == "postgres" or db_type == "sqlite3":
+if db_type == "postgres" or db_type == "sqlite":
 	create_triggers()
