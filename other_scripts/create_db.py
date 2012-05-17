@@ -123,7 +123,9 @@ def create_table(name, elements):
 				elif db_type == "postgres":
 					create_statement += " " + e["type"]	
 			elif e["type"] in complex_types:
-				create_statement += ", " + e["name"] + "_id {xml_integer}" 
+				sub_schema_elements = schema.get_sub_schema(e["type"])["elements"]
+				for s_s_e in sub_schema_elements:
+					create_statement += ", " + e["name"] + "_" + s_s_e["name"] + " {" + s_s_e["type"] + "}"
 
 	create_statement += timestamp_fields()
 	if name not in complex_types:
@@ -189,11 +191,11 @@ if db_type == "postgres":
 	for simple in simple_types:
 		create_enum(simple, schema.get_element_list("simpleType", simple))
 
-for complex_t in complex_types:
+#for complex_t in complex_types:
 	
-	sub_schema = schema.get_sub_schema(complex_t)
-	if "elements" in sub_schema:
-		create_table(complex_t, sub_schema["elements"])
+#	sub_schema = schema.get_sub_schema(complex_t)
+#	if "elements" in sub_schema:
+#		create_table(complex_t, sub_schema["elements"])
 
 for element in elements:
 	create_table(element, schema.get_sub_schema(element)["elements"])
