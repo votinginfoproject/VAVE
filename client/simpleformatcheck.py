@@ -1,4 +1,4 @@
-from schema import Schema
+from celement_schema import Schema
 from ConfigParser import ConfigParser
 import csv
 import os
@@ -16,6 +16,7 @@ class SimpleFormatCheck:
 		self.invalid_files = {}
 		self.valid_files = {}
 		self.invalid_sections = []
+		self.has_xml = False
 	
 	def set_directory(self, directory):
 		self.directory = directory
@@ -71,7 +72,7 @@ class SimpleFormatCheck:
 		missing = []
 
 		for r in REQUIRED_ELEMENTS:
-			if r not in self.valid_files.vals():
+			if r not in self.valid_files.values():
 				missing.append(r)
 		return missing
 
@@ -93,6 +94,10 @@ class SimpleFormatCheck:
 	def validate_wo_config(self, file_list):
 
 		for fname in file_list:
+			
+			if fname.endswith(".xml"):
+				self.has_xml = True
+				continue
 
 			ename = fname.split(".")[0].lower()
 
@@ -107,6 +112,8 @@ class SimpleFormatCheck:
 						self.invalid_files[fname] = ename
 
 		if len(self.missing_files()) == 0 and len(self.invalid_files) == 0:
+			return True
+		if self.has_xml:
 			return True
 		return False
 
@@ -140,6 +147,10 @@ class SimpleFormatCheck:
 			fieldnames = header.split(",")
 			with open(self.directory + fname) as f:
 
+				if fname.endswith(".xml"):
+					self.has_xml = True
+					continue
+
 				fdata = csv.reader(f)
 				
 				try:
@@ -157,12 +168,14 @@ class SimpleFormatCheck:
 		
 		if len(self.missing_files()) == 0 and len(self.invalid_files) == 0:
 			return True
+		if self.has_xml:
+			return True
 		return False	
 
 	def column_check(self, ename, header):
 	
 		for column in header:
-			if column not in self.elem_fields[ename]:
+			if column not in self.elem_fields[ename] and column not in ["vip_id","feed_id","election_id"]:
 				return False
 		return True
 
