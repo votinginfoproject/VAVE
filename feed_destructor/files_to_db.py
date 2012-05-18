@@ -118,10 +118,10 @@ for f in os.listdir(FEED_DIR):
 			for row in output_data[key]:
 				w.writerow(output_data[key][row])
 
-SQL_STATEMENT = "COPY {0}({1}) FROM '{2}' WITH CSV HEADER" =
+SQL_STATEMENT = "COPY {0}({1}) FROM '{2}' WITH CSV HEADER"
 
 for f in os.listdir(FEED_DIR + "database_files"):
 	r = csv.DictReader(open(FEED_DIR+"database_files/"+f, "r"))
 	copy_statement = SQL_STATEMENT.format(f.split(".")[0], ",".join(r.fieldnames), f)
-	cursor.copy_expert(SQL, sys.stdin)
+	cursor.copy_expert(copy_statement, sys.stdin)
 	connection.commit()
