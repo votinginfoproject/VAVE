@@ -1,7 +1,7 @@
 File Validated:
 
 ----------------------
-Election Data:
+Election Data
 ----------------------
 
 State:
