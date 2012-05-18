@@ -44,7 +44,7 @@ def has_changed(fname):
 		cursor.execute("INSERT INTO file_data (file_name, hash) VALUES('" + fname + "','" + new_hash + "')")
 		connection.commit()
 		return True
-	elif old_vals[0] != new_hash:
+	elif old_vals[0] != new_hash or fname.find("source") >= 0 or fname.find("election") >= 0: #election and source are always sent, unless and xml file is provided and the elements are contained there
 		cursor.execute("UPDATE file_data SET hash = '" + new_hash + "' WHERE file_name = '" + fname + "'")
 		connection.commit()
 		return True
