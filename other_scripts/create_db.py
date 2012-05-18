@@ -60,7 +60,7 @@ def timestamp_fields():
 	return ", last_modified {timestamp} {date_modified}, date_created {timestamp} {date_created}"
 
 def create_enum(simple, simple_elements):
-	simple_elements = list(set(e.lower() for e in simple_elements)) #eliminate case from enums
+	simple_elements = simple_elements #eliminate case from enums
 	create_statement = "CREATE TYPE " + str(simple) 
 	create_statement += " AS ENUM('" + "','".join(simple_elements) + "');"
 	cursor.execute(create_statement)
@@ -190,12 +190,6 @@ elements = schema.get_element_list("element", "vip_object")
 if db_type == "postgres":
 	for simple in simple_types:
 		create_enum(simple, schema.get_element_list("simpleType", simple))
-
-#for complex_t in complex_types:
-	
-#	sub_schema = schema.get_sub_schema(complex_t)
-#	if "elements" in sub_schema:
-#		create_table(complex_t, sub_schema["elements"])
 
 for element in elements:
 	create_table(element, schema.get_sub_schema(element)["elements"])
