@@ -1,0 +1,9 @@
+#VAVE#
+
+##Client API##
+
+###Upload Feed###
+
+{{/feed/upload}} HTTP Method: {{PUT}}
+
+{{curl -X PUT "http://127.0.0.1:8000/api/feed/upload/" --data @vipFeed-54-2012-05-08.zip -H "Content-Type:application/zip" -H "Content-Disposition:attachment; filename=\"vipFeed-54-2012-05-08.zip\"" -H "If-Match:\"vipFeed-54-2012-05-08.zip\""}}
