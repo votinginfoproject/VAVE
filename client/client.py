@@ -24,7 +24,7 @@ def setup_db():
 
 def write_logs(status):
 	
-	w = open(config.get("app_settings", "log_file"), "a")
+	w = open(config.get("app_settings", "log_file"), "ab")
 	w.write("******************"+str(datetime.now())+"*********************\n\n")
 	
 	if status == "invalid":
@@ -113,7 +113,7 @@ else:
 
 if len(files_to_send) > 0:
 	xml_doc = get_xml()
-	if xml_doc and not (file_directory + xml_doc) in files_to_send:
+	if xml_doc and not any(f.endswith(".xml") for f in files_to_send):
 		files_to_send.append(file_directory + xml_doc)
 	elif not xml_doc:
 		for f in default_files:
