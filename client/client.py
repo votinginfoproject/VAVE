@@ -25,7 +25,7 @@ def setup_db():
 def write_logs(status):
 	
 	w = open(config.get("app_settings", "log_file"), "a")
-	w.write("******************"+str(datetime.utcnow().isoformat())+"*********************\n\n")
+	w.write("******************"+str(datetime.now())+"*********************\n\n")
 	
 	if status == "invalid":
 		w.write("Could not process data, missing files and/or no xml file provided\n")
@@ -44,15 +44,15 @@ def has_changed(fname):
 		cursor.execute("INSERT INTO file_data (file_name, hash) VALUES('" + fname + "','" + new_hash + "')")
 		connection.commit()
 		return True
-	elif old_vals[0] != new_hash or fname.find("source") >= 0 or fname.find("election") >= 0: #election and source are always sent, unless and xml file is provided and the elements are contained there
+	elif old_vals[0] != new_hash: #election and source are always sent, unless and xml file is provided and the elements are contained there
 		cursor.execute("UPDATE file_data SET hash = '" + new_hash + "' WHERE file_name = '" + fname + "'")
 		connection.commit()
 		return True
 	return False
 
 def file_hash(fname):
+	m = md5()
 	with open(fname, "rb") as fh:
-		m = md5()
 		for data in fh.read(8192):
 			m.update(data)
 	return m.hexdigest()
@@ -63,12 +63,23 @@ def send_files(files_to_send):
 		f.write(name, os.path.basename(name), zipfile.ZIP_DEFLATED)
 	f.close()
 
+def get_xml():
+	for fname in os.listdir(file_directory):
+		if fname.endswith(".xml"):
+			return fname
+
+def clean_directory(directory):
+	if not directory.endswith("/"):
+		return directory + "/"
+	return directory
+
 config = ConfigParser()
 config.read(CONFIG_FILE)
 
 schema_file = get_schema_file()
 
 file_directory = config.get("local_settings", "file_directory")
+file_directory = clean_directory(file_directory)
 fc = SimpleFormatCheck(schema_file, file_directory)
 
 if not fc.validate_files():
@@ -81,18 +92,33 @@ connection = sqlite3.connect(config.get("app_settings", "db_host"))
 cursor = connection.cursor()
 setup_db()
 
+default_files = config.get("app_settings","default_files").split(",")
+
 files_to_send = []
 
-for fname in os.listdir(file_directory):
-	full_name = file_directory + "/" + fname
-	if fname.endswith(".xml") or fname == CONFIG_FILE:
-		if has_changed(full_name):
-			files_to_send.append(full_name)
-	elif fname in valid_files:
-		if has_changed(full_name):
-			files_to_send.append(full_name)
+if config.has_option("app_settings","feed_data") and len(config.get("app_settings","feed_data")) > 0:
+	feed_file = config.get("app_settings","feed_data")
+	full_name = file_directory + fname
+	if has_changed(full_name):
+		files_to_send.append(full_name)
+else:
+	for fname in os.listdir(file_directory):
+		full_name = file_directory + fname
+		if fname.endswith(".xml") or fname == CONFIG_FILE:
+			if has_changed(full_name):
+				files_to_send.append(full_name)
+		elif fname in valid_files:
+			if has_changed(full_name):
+				files_to_send.append(full_name)
 
 if len(files_to_send) > 0:
+	xml_doc = get_xml()
+	if xml_doc and not (file_directory + xml_doc) in files_to_send:
+		files_to_send.append(file_directory + xml_doc)
+	else:
+		for f in default_files:
+			if file_directory + f not in files_to_send:
+				files_to_send.append(file_directory + f)
 	send_files(files_to_send)
 	write_logs("success")
 else:
