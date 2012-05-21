@@ -115,7 +115,7 @@ if len(files_to_send) > 0:
 	xml_doc = get_xml()
 	if xml_doc and not (file_directory + xml_doc) in files_to_send:
 		files_to_send.append(file_directory + xml_doc)
-	else:
+	elif not xml_doc:
 		for f in default_files:
 			if file_directory + f not in files_to_send:
 				files_to_send.append(file_directory + f)
