@@ -44,7 +44,7 @@ def has_changed(fname):
 		cursor.execute("INSERT INTO file_data (file_name, hash) VALUES('" + fname + "','" + new_hash + "')")
 		connection.commit()
 		return True
-	elif old_vals[0] != new_hash: #election and source are always sent, unless and xml file is provided and the elements are contained there
+	elif old_vals[0] != new_hash: 
 		cursor.execute("UPDATE file_data SET hash = '" + new_hash + "' WHERE file_name = '" + fname + "'")
 		connection.commit()
 		return True
@@ -96,9 +96,9 @@ default_files = config.get("app_settings","default_files").split(",")
 
 files_to_send = []
 
-if config.has_option("app_settings","feed_data") and len(config.get("app_settings","feed_data")) > 0:
-	feed_file = config.get("app_settings","feed_data")
-	full_name = file_directory + fname
+if config.has_option("local_settings","feed_data") and len(config.get("local_settings","feed_data")) > 0:
+	feed_file = config.get("local_settings","feed_data")
+	full_name = file_directory + feed_file
 	if has_changed(full_name):
 		files_to_send.append(full_name)
 else:
