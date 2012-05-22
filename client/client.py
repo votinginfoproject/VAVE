@@ -5,6 +5,7 @@ from sys import exit
 from ConfigParser import ConfigParser
 from datetime import datetime
 from hashlib import md5
+import put
 import os
 import zipfile
 	
@@ -58,9 +59,14 @@ def file_hash(fname):
 	return m.hexdigest()
 
 def send_files(files_to_send):
-	f = zipfile.ZipFile(config.get("local_settings","output_file"), "w")
+	output_file = config.get("local_settings", "output_file")
+	output_url = config.get("connection_settings", "output_url")
+	f = zipfile.ZipFile(output_file, "w")
 	for name in files_to_send:
 		f.write(name, os.path.basename(name), zipfile.ZIP_DEFLATED)
+	f.close()
+	f = open(output_file, 'rb')
+	put.putfile(f, output_url + output_file)
 	f.close()
 
 def get_xml():
