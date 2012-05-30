@@ -1,5 +1,5 @@
 import os
-from filetype import FileType
+import filetype as ft
 from hashlib import md5
 
 TEMP_DIR = "temp/"
@@ -12,8 +12,6 @@ fname = "v2_3.xml"
 #also, make sure all directory names passed in are standardized
 
 def main():
-	
-	ft = FileType()
 	
 	setup_dir(TEMP_DIR)
 

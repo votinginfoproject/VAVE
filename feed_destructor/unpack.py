@@ -1,6 +1,6 @@
 import os
 import shutil
-from filetype import FileType
+import filetype as ft
 from gzip import GzipFile
 from bz2 import BZ2File
 from rarfile import RarFile
@@ -11,8 +11,6 @@ import re
 class Unpack:
 
 	def __init__(self, file_name, extract_path=None):
-
-		self.ft = FileType()
 
 		self.extract_path = extract_path
 
@@ -36,7 +34,7 @@ class Unpack:
 			self.unpack_file(file_name)
 
 	def uncompress(self, fname):
-		ftype = self.ft.get_type(fname)
+		ftype = ft.get_type(fname)
 	
 		if ftype == "gz":
 			ext = GzipFile(fname, 'rb')
@@ -48,14 +46,14 @@ class Unpack:
 		w = open(new_name, "w")
 		w.write(filedata)
 
-		new_type = self.ft.get_type(new_name)
+		new_type = ft.get_type(new_name)
 		if new_type:
 			os.rename(new_name, new_name + "." + new_type)
 			return new_name + "." + new_type
 		return new_name
 
 	def unarchive(self, fname):
-		ftype = self.ft.get_type(fname)
+		ftype = ft.get_type(fname)
 	
 		if ftype == "rar":
 			ext = RarFile(fname)
@@ -77,11 +75,11 @@ class Unpack:
 				self.unpack_file(full_name)
 
 	def unpack_file(self, fname):
-		if self.ft.is_compression(fname) or self.ft.is_archived(fname):
+		if ft.is_compression(fname) or ft.is_archived(fname):
 		
-			if self.ft.is_compression(fname):
+			if ft.is_compression(fname):
 				new_file = self.uncompress(fname)
-			elif self.ft.is_archived(fname):
+			elif ft.is_archived(fname):
 				new_file = self.unarchive(fname)
 		
 			if fname != new_file:
