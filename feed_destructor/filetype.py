@@ -1,12 +1,13 @@
-from magic import Magic
-import xml.sax
+import magic
 import csv
+import xml.sax
 
 TYPE_MAPPING = {"gzip":"gz", "bzip2":"bz2", "Zip":"zip", "RAR":"rar", "POSIX tar":"tar"}
 COMPRESSION = ["gz", "bz2"]
 ARCHIVED = ["zip", "rar", "tar"]
 
-m = Magic()
+
+m = magic.Magic()
 
 def get_type(fname):
     ftype = m.from_file(fname)
@@ -28,7 +29,18 @@ def get_type(fname):
                 pass
 
             fh.seek(0)
-			
+
+            #if line count is less than 2, csv type check will not be accurate
+            #so txt is returned as default
+            linecount = 0
+            for line in fh:
+                linecount += 1
+                if linecount > 2:
+                    break
+            if linecount <= 2:
+                return 'txt'
+                        
+            fh.seek(0)
             try:
                 dialect = csv.Sniffer().sniff(fh.read(1024))
                 return 'csv'
