@@ -1,54 +1,58 @@
 import os
-import filetype as ft
 from hashlib import md5
+import filetype as ft
 import directorysearch as ds
 import unpack
+import formatcheck as fc
 
 TEMP_DIR = "temp/"
 FEED_DIR = "feed_data/"
 ARCHIVE_DIR = "archived/"
 SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
+CONFIG_FILE = "vip.cfg"
 fname = "v2_3.xml"
-
-#pull data in from old config file for cur date, etc?
-#also, make sure all directory names passed in are standardized
 
 def main():
 	
-	setup_dir(TEMP_DIR)
+	clear_directory(TEMP_DIR)
 
 	ftype = ft.get_type(fname)
 
-	ftff = FeedToFlatFiles(TEMP_DIR)
+	unpack.unpack(fname, TEMP_DIR)
+	unpack.flatten_folder(TEMP_DIR)
 
-	if ftype == "xml":
-		ftff.process_feed(fname)
-	elif ft.is_compression(ftype) or ft.is_archived(ftype):
-		unpack.unpack(fname, TEMP_DIR)
-		unpack.flatten_folder(TEMP_DIR)
-		xml_file = ds.file_by_extension(".xml", TEMP_DIR)
-		if xml_file:
-			ftff.process_feed(xml_file)
-
-	fc = FormatCheck(urlopen(SCHEMA_URL), TEMP_DIR)
-	fc.validate_and_clean()
+	if ds.file_by_name(CONFIG_FILE, TEMP_DIR):
+		process_config(TEMP_DIR, CONFIG_FILE)
+	if ds.files_by_extension(".txt", TEMP_DIR) > 0:
+		process_flatfiles(TEMP_DIR)
+	xml_files = ds.files_by_extension(".xml", TEMP_DIR)
+	if len(xml_files) == 1:
+		ftff.process_feed(xml_files[0])
+	
 	#need to get error report here
-
-	write_and_archive(fc.get_valid_files(), fc.get_vip_id())
-
-def setup_dir(dir_name):
-
-	if not os.path.isdir(dir_name):
-		os.mkdir(dir_name)
-	elif dir_name == TEMP_DIR:
-		clear_directory(dir_name)
+	#write_and_archive(fc.get_valid_files(), fc.get_vip_id())
 
 def clear_directory(directory):
+
+	if not os.path.exists(directory):
+		os.mkdir(directory)
+		return
+
 	for root, dirs, files in os.walk(directory):
 		for f in files:
 			os.unlink(os.path.join(root, f))
 		for d in dirs:
 			rmtree(os.path.join(root, d))
+
+#add in header to all valid formatted files, delete invalid files
+def process_config(directory, config_file):
+	valid_files = fc.get_valid_files(directory, config_file) 
+	invalid_files = fc.get_valid_files(directory, config_file) 
+
+#check flat file format, if element format, check then convert to element format
+#if db format, check and then leave alone
+def process_flatfiles(directory):
+	format_type = fc.flat_file_format(directory)
 
 def write_and_archive(valid_files, vip_id):
 	
