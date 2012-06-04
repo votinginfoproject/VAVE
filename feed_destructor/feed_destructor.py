@@ -2,6 +2,7 @@ import os
 import filetype as ft
 from hashlib import md5
 import directorysearch as ds
+import unpack
 
 TEMP_DIR = "temp/"
 FEED_DIR = "feed_data/"
@@ -23,8 +24,8 @@ def main():
 	if ftype == "xml":
 		ftff.process_feed(fname)
 	elif ft.is_compression(ftype) or ft.is_archived(ftype):
-		unpack = Unpack(fname, TEMP_DIR)
-		unpack.flatten_folder()
+		unpack.unpack(fname, TEMP_DIR)
+		unpack.flatten_folder(TEMP_DIR)
 		xml_file = ds.file_by_extension(".xml", TEMP_DIR)
 		if xml_file:
 			ftff.process_feed(xml_file)
