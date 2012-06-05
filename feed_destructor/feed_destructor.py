@@ -4,6 +4,8 @@ import filetype as ft
 import directorysearch as ds
 import unpack
 import formatcheck as fc
+from schemaprops import SchemaProps
+from ConfigParser import ConfigParser
 
 TEMP_DIR = "temp/"
 FEED_DIR = "feed_data/"
@@ -21,8 +23,10 @@ def main():
 	unpack.unpack(fname, TEMP_DIR)
 	unpack.flatten_folder(TEMP_DIR)
 
+	sp = SchemaProps()
+
 	if ds.file_by_name(CONFIG_FILE, TEMP_DIR):
-		process_config(TEMP_DIR, CONFIG_FILE)
+		process_config(TEMP_DIR, TEMP_DIR + CONFIG_FILE, sp)
 	if ds.files_by_extension(".txt", TEMP_DIR) > 0:
 		process_flatfiles(TEMP_DIR)
 	xml_files = ds.files_by_extension(".xml", TEMP_DIR)
@@ -45,9 +49,34 @@ def clear_directory(directory):
 			rmtree(os.path.join(root, d))
 
 #add in header to all valid formatted files, delete invalid files
-def process_config(directory, config_file):
-	valid_files = fc.get_valid_files(directory, config_file) 
-	invalid_files = fc.get_valid_files(directory, config_file) 
+def process_config(directory, config_file, schema_props):
+	
+	config = ConfigParser()
+	config.read(config_file)
+	sections = config.sections()
+	if any(s not in schema_props.key_list("element") for s in sections):
+		if all(s in schema_props.key_list("db") for s in sections):
+			invalid_sections = fc.invalid_config_sections(config_file, schema_props.full_header_data("db"))
+		else:
+			print "sections error!!!"
+	else:
+		invalid_sections = fc.invalid_config_sections(config_file, schema_props.full_header_data("element"))
+
+	for s in sections:
+		fname = config.get(s, "file_name")
+		header = config.get(s, "header")
+		if s in invalid_sections:
+			if os.path.exsits(directory + fname):
+				os.remove(directory + fname)
+		else:
+			with open(directory + s + "_temp.txt", "w") as w:
+				w.write(header + "\n")
+				with open(directory + fname, "r") as r:
+					for line in r:
+						w.write(r)
+				os.remove(directory + fname)
+			os.rename(directory + s + "_temp.txt", directory + fname)
+	os.remove(config_file)
 
 #check flat file format, if element format, check then convert to element format
 #if db format, check and then leave alone
