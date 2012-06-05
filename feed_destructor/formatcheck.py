@@ -1,4 +1,5 @@
 import csv
+from os import path
 from ConfigParser import ConfigParser
 
 def invalid_config_sections(directory, config_file, section_props):
@@ -9,6 +10,10 @@ def invalid_config_sections(directory, config_file, section_props):
 	invalid_sections = []
 	for s in sections:
 		if s not in section_props:
+			invalid_sections.append(s)
+		elif not config.has_option(s, "file_name") or not config.has_option(s, "header"):
+			invalid_sections.append(s)
+		elif not os.path.exists(directory + config.get(s, "file_name")):
 			invalid_sections.append(s)
 		else:
 			header = config.get(s, "header").split(",")
