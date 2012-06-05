@@ -56,17 +56,17 @@ def process_config(directory, config_file, schema_props):
 	sections = config.sections()
 	if any(s not in schema_props.key_list("element") for s in sections):
 		if all(s in schema_props.key_list("db") for s in sections):
-			invalid_sections = fc.invalid_config_sections(config_file, schema_props.full_header_data("db"))
+			invalid_sections = fc.invalid_config_sections(directory, config_file, schema_props.full_header_data("db"))
 		else:
 			print "sections error!!!"
 	else:
-		invalid_sections = fc.invalid_config_sections(config_file, schema_props.full_header_data("element"))
+		invalid_sections = fc.invalid_config_sections(directory, config_file, schema_props.full_header_data("element"))
 
 	for s in sections:
 		fname = config.get(s, "file_name")
 		header = config.get(s, "header")
 		if s in invalid_sections:
-			if os.path.exsits(directory + fname):
+			if os.path.exists(directory + fname):
 				os.remove(directory + fname)
 		else:
 			with open(directory + s + "_temp.txt", "w") as w:
@@ -77,10 +77,11 @@ def process_config(directory, config_file, schema_props):
 				os.remove(directory + fname)
 			os.rename(directory + s + "_temp.txt", directory + fname)
 	os.remove(config_file)
+	return invalid_sections
 
 #check flat file format, if element format, check then convert to element format
 #if db format, check and then leave alone
-def process_flatfiles(directory):
+def process_flatfiles(directory, schema_props):
 	format_type = fc.flat_file_format(directory)
 
 def write_and_archive(valid_files, vip_id):
