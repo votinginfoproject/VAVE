@@ -1,1 +1,1 @@
-ballot_id,candidate_id,candidate_id_sort_order
+ballot_id,candidate_id,sort_order
