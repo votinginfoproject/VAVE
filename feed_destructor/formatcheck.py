@@ -20,7 +20,7 @@ def invalid_config_sections(directory, config_file, section_props):
 			if any(h not in section_props[s] for h in header):
 				invalid_sections.append(s)
 				continue
-			with open(directory + config.get(s, "file_name") as f:
+			with open(directory + config.get(s, "file_name")) as f:
 				fdata = csv.reader(f)
 				try:
 					if len(fdata.next()) != len(fieldnames):
@@ -28,3 +28,16 @@ def invalid_config_sections(directory, config_file, section_props):
 				except:
 					invalid_sections.append(s)
 	return invalid_sections
+
+def invalid_files(directory, file_list, file_props):
+	invalid_files = []
+ 	for k, v in file_list:
+		with open(directory + k) as f:
+			try:
+				fdata = csv.DictReader(f)
+			except:
+				invalid_files.append(f)
+				continue
+			if any(h not in file_props[v] for h in fdata.fieldnames):
+				invalid_files.append(k)
+	return invalid_files
