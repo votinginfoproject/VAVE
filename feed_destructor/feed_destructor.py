@@ -83,19 +83,22 @@ def process_config(directory, config_file, schema_props):
 #if db format, check and then leave alone
 def process_flatfiles(directory, schema_props):
 
-	file_list = {} 
+	file_list = {}
 	for f in os.listdir(directory):
 		fname, extension = f.lower().split(".")
 		if extension == "txt" or extension == "csv":
 			file_list[fname] = f
 
-	if any(fname not in schema_props.key_list("element") for fname in file_list.keys()):
-		if all(fname in schema_props.key_list("db") for fname in file_list.keys()):
+	if any(vals not in schema_props.key_list("element") for vals in file_list.values()):
+		if all(vals in schema_props.key_list("db") for vals in file_list.values()):
 			invalid_files = fc.invalid_files(directory, file_list, schema_props.full_header_data("db"))
 		else:
-			print "sections error!!!"
+			print "file error!!!"
 	else:
 		invalid_files = fc.invalid_files(directory, file_list, schema_props.full_header_data("element"))
+		for f in os.listdir(directory):
+			if f in invalid_files:
+				os.remove(directory + f)
 		#convert files that are not on the invalid files list into db files
 
 	for invalid in invalid_files:
