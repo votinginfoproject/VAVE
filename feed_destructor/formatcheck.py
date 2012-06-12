@@ -13,7 +13,7 @@ def invalid_config_sections(directory, config_file, section_props):
 			invalid_sections.append(s)
 		elif not config.has_option(s, "file_name") or not config.has_option(s, "header"):
 			invalid_sections.append(s)
-		elif not os.path.exists(directory + config.get(s, "file_name")):
+		elif not path.exists(directory + config.get(s, "file_name")):
 			invalid_sections.append(s)
 		else:
 			header = config.get(s, "header").split(",")
@@ -23,7 +23,7 @@ def invalid_config_sections(directory, config_file, section_props):
 			with open(directory + config.get(s, "file_name")) as f:
 				fdata = csv.reader(f)
 				try:
-					if len(fdata.next()) != len(fieldnames):
+					if len(fdata.next()) != len(header):
 						invalid_sections.append(s)
 				except:
 					invalid_sections.append(s)
@@ -31,7 +31,7 @@ def invalid_config_sections(directory, config_file, section_props):
 
 def invalid_files(directory, file_list, file_props):
 	invalid_files = []
- 	for k, v in file_list:
+ 	for k, v in file_list.iteritems():
 		with open(directory + k) as f:
 			try:
 				fdata = csv.DictReader(f)
