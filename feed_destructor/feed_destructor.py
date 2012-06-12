@@ -96,14 +96,17 @@ def process_flatfiles(directory, schema_props):
 			print "file error!!!"
 	else:
 		invalid_files = fc.invalid_files(directory, file_list, schema_props.full_header_data("element"))
-		for f in os.listdir(directory):
-			if f in invalid_files:
-				os.remove(directory + f)
+		for k, v in file_list:
+			if k in invalid_files:
+				os.remove(directory + k)
+			else:
+				convert_data(directory, k, v, schema_props.conversion_by_element(v))
+		
 		#convert files that are not on the invalid files list into db files
 
-	for invalid in invalid_files:
-		os.remove(directory + invalid)
 	return invalid_files
+
+def convert_data(directory, f_name, element, conversion_dict):
 
 def write_and_archive(valid_files, vip_id):
 	
