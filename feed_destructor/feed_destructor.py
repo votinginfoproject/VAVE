@@ -6,36 +6,34 @@ import unpack
 import formatcheck as fc
 from schemaprops import SchemaProps
 from ConfigParser import ConfigParser
+import csv
 
 TEMP_DIR = "temp/"
 FEED_DIR = "feed_data/"
 ARCHIVE_DIR = "archived/"
 SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
 CONFIG_FILE = "vip.cfg"
-fname = "v2_3.xml"
+unpack_file = "test.tar.gz"
 
 def main():
 	
 	clear_directory(TEMP_DIR)
 
-	ftype = ft.get_type(fname)
+	ftype = ft.get_type(unpack_file)
 
-	unpack.unpack(fname, TEMP_DIR)
+	unpack.unpack(unpack_file, TEMP_DIR)
 	unpack.flatten_folder(TEMP_DIR)
 
 	sp = SchemaProps()
 
 	if ds.file_by_name(CONFIG_FILE, TEMP_DIR):
-		process_config(TEMP_DIR, TEMP_DIR + CONFIG_FILE, sp)
+		print "Invalid sections: " + str(process_config(TEMP_DIR, TEMP_DIR + CONFIG_FILE, sp))
 	if ds.files_by_extension(".txt", TEMP_DIR) > 0:
-		process_flatfiles(TEMP_DIR)
-	xml_files = ds.files_by_extension(".xml", TEMP_DIR)
-	if len(xml_files) == 1:
-		ftff.process_feed(xml_files[0])
+		print "Invalid files: " + str(process_flatfiles(TEMP_DIR, sp))
+	#xml_files = ds.files_by_extension(".xml", TEMP_DIR)
+	#if len(xml_files) == 1:
+	#	ftff.process_feed(xml_files[0])
 	
-	#need to get error report here
-	#write_and_archive(fc.get_valid_files(), fc.get_vip_id())
-
 def clear_directory(directory):
 
 	if not os.path.exists(directory):
@@ -73,7 +71,7 @@ def process_config(directory, config_file, schema_props):
 				w.write(header + "\n")
 				with open(directory + fname, "r") as r:
 					for line in r:
-						w.write(r)
+						w.write(line)
 				os.remove(directory + fname)
 			os.rename(directory + s + "_temp.txt", directory + fname)
 	os.remove(config_file)
@@ -85,9 +83,9 @@ def process_flatfiles(directory, schema_props):
 
 	file_list = {}
 	for f in os.listdir(directory):
-		fname, extension = f.lower().split(".")
+		element_name, extension = f.lower().split(".")
 		if extension == "txt" or extension == "csv":
-			file_list[fname] = f
+			file_list[f] = element_name
 
 	if any(vals not in schema_props.key_list("element") for vals in file_list.values()):
 		if all(vals in schema_props.key_list("db") for vals in file_list.values()):
@@ -96,17 +94,56 @@ def process_flatfiles(directory, schema_props):
 			print "file error!!!"
 	else:
 		invalid_files = fc.invalid_files(directory, file_list, schema_props.full_header_data("element"))
-		for k, v in file_list:
+		for k, v in file_list.iteritems():
 			if k in invalid_files:
 				os.remove(directory + k)
 			else:
 				convert_data(directory, k, v, schema_props.conversion_by_element(v))
-		
-		#convert files that are not on the invalid files list into db files
-
 	return invalid_files
 
-def convert_data(directory, f_name, element, conversion_dict):
+def convert_data(directory, fname, element, conversion_dict):
+	for conversion in conversion_dict:
+		if conversion == element:
+			continue
+		with open(directory + fname, "r") as f:
+			fdata = csv.DictReader(f)
+			header = fdata.fieldnames
+			output_list = []
+			header_list = []
+			for h in header:
+				if h in conversion_dict[conversion]:
+					header_list.append(conversion_dict[conversion][h])
+					output_list.append(h)
+			if len(output_list) > 1:
+				print "processing " + conversion
+				with open(directory + conversion + ".txt", "w") as w:
+					w.write(",".join(header_list) + "\n")
+					for row in fdata:
+						row_data = []
+						for o in output_list:
+							row_data.append(row[o])
+						w.write(",".join(row_data) + "\n")
+	element_conversion = conversion_dict[element]
+	print "processing " + element		
+	with open(directory + fname, "r") as f:
+		fdata = csv.DictReader(f)
+		header = fdata.fieldnames
+		output_list = []
+		header_list = []
+		for h in header:
+			if h in element_conversion:
+				#need to figure out which (key or value) is being pulled for the header name
+				header_list.append(element_conversion[h])
+				output_list.append(h)
+		with open(directory + element + "_temp.txt", "w") as w:
+			w.write(",".join(header_list) + "\n")
+			for row in fdata:
+				row_data = []
+				for o in output_list:
+					row_data.append(row[o])
+				w.write(",".join(row_data) + "\n")		
+	os.remove(directory + fname)
+	os.rename(directory + element + "_temp.txt", directory + fname)
 
 def write_and_archive(valid_files, vip_id):
 	
