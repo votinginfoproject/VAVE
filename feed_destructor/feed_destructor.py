@@ -4,6 +4,7 @@ import filetype as ft
 import directorysearch as ds
 import unpack
 import formatcheck as fc
+import feedtoflatfiles as ftff
 from schemaprops import SchemaProps
 from ConfigParser import ConfigParser
 import csv
@@ -30,9 +31,10 @@ def main():
 		print "Invalid sections: " + str(process_config(TEMP_DIR, TEMP_DIR + CONFIG_FILE, sp))
 	if ds.files_by_extension(".txt", TEMP_DIR) > 0:
 		print "Invalid files: " + str(process_flatfiles(TEMP_DIR, sp))
-	#xml_files = ds.files_by_extension(".xml", TEMP_DIR)
-	#if len(xml_files) == 1:
-	#	ftff.process_feed(xml_files[0])
+	xml_files = ds.files_by_extension(".xml", TEMP_DIR)
+	if len(xml_files) == 1:
+		ftff.feed_to_db_files(TEMP_DIR, TEMP_DIR + xml_files[0], sp.full_header_data("db"), sp.version)
+		os.remove(TEMP_DIR + xml_files[0])
 	
 def clear_directory(directory):
 
