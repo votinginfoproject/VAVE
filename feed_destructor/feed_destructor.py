@@ -7,7 +7,12 @@ import formatcheck as fc
 import feedtoflatfiles as ftff
 from schemaprops import SchemaProps
 from ConfigParser import ConfigParser
+import psycopg2
 import csv
+from psycopg2 import extras
+from datetime import date
+from shutil import copyfile
+import hashlib
 
 TEMP_DIR = "temp/"
 FEED_DIR = "feed_data/"
@@ -15,6 +20,7 @@ ARCHIVE_DIR = "archived/"
 SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
 CONFIG_FILE = "vip.cfg"
 unpack_file = "test.tar.gz"
+DEFAULT_ELECTION_ID = 1000
 
 def main():
 	
@@ -35,6 +41,79 @@ def main():
 	if len(xml_files) == 1:
 		ftff.feed_to_db_files(TEMP_DIR, TEMP_DIR + xml_files[0], sp.full_header_data("db"), sp.version)
 		os.remove(TEMP_DIR + xml_files[0])
+	
+	meta_conn = psycopg2.connect(host="localhost", database="vip_metadata", user="jensen", password="gamet1me")
+	meta_cursor = meta_conn.cursor(cursor_factory=extras.RealDictCursor)
+
+	vip_id, election_id = id_vals(TEMP_DIR, meta_cursor, meta_conn)
+
+	process_files(TEMP_DIR, ARCHIVE_DIR, vip_id, election_id, meta_cursor, meta_conn)
+
+def process_files(feed_dir, archive_dir, vip_id, election_id, cursor, conn):
+
+	file_list = os.listdir(self.directory)
+
+	
+	#get new files
+
+	archive_files(feed_dir, archive_dir, file_list)
+	
+	convert_files(directory, file_list, vip_id, election_id)
+
+	update_db(directory, file_list)
+
+def archive_files(feed_dir, archive_dir, file_list):
+	cur_date = date.today().isoformat()
+	for f in file_list:
+		element_name, extension = f.lower().split(".")
+		copyfile(feed_dir + f, archive_dir + element_name + "_" + str(cur_date) + ".txt")
+
+def md5Checksum(fname):
+	with open(fname, "rb") as fh:
+		m = hashlib.md5()
+		for data in fh.read(8192):
+			m.update(data)
+	return m.hexdigest()
+
+def update_db(directory, files):
+
+	vip_conn = psycopg2.connect(host="localhost", database="vip", user="jensen", password="gamet1me")
+	vip_cursor = vip_conn.cursor()
+	SQL_STATEMENT = "COPY {0}({1}) FROM '{2}' WITH CSV HEADER"
+
+	for f in files:
+		r = csv.DictReader(open(directory+f, "r"))
+		copy_statement = SQL_STATEMENT.format(f.split(".")[0].lower(), ",".join(r.fieldnames), "/"+f)
+		print copy_statement
+		vip_cursor.copy_expert(copy_statement, sys.stdin)
+		vip_conn.commit()
+
+def id_vals(directory, cursor, conn):
+	with open(directory + "source.txt", "r") as f:
+		fdata = csv.DictReader(f)
+		for row in fdata:
+			vip_id = row["vip_id"]
+	with open(directory + "election.txt", "r") as f:
+		fdata = csv.DictReader(f)
+		for row in fdata:
+			election_date = row["date"]
+			election_type = row["election_type"]
+	
+	cursor.execute("SELECT * FROM elections WHERE vip_id = " + str(vip_id) + " AND election_date = '" + election_date + "' AND election_type = '" + election_type + "'")
+	election_data = cursor.fetchone()
+	if not election_data:
+		cursor.execute("SELECT GREATEST(election_id) FROM elections")
+		last_id = cursor.fetchone()
+		if not last_id:
+			new_id = DEFAULT_ELECTION_ID
+		else:
+			new_id = int(last_id) + 1
+		cursor.execute("INSERT INTO elections (vip_id, election_date, election_type, election_id) VALUES (" + str(vip_id) + "," + election_date + "," + election_type + "," + str(new_id) + ")")
+		conn.commit()
+		return vip_id, election_id
+	else:
+		return vip_id, election_data["election_id"]
+
 	
 def clear_directory(directory):
 
