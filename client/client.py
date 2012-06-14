@@ -35,7 +35,7 @@ def write_logs(status):
 		w.write("No update sent due to lack of file changes\n\n")
 	if status == "success":
 		w.write("Files successfully sent: " + str(files_to_send) + "\n")
-		w.write("Invalid files that failed to send: " + str(fc.get_invalid_files()) + "\n\n")
+		w.write("Invalid files that failed to send: " + str(fc.get_invalid_files().keys()) + "\n\n")
 
 def has_changed(fname):
 	cursor.execute("SELECT hash FROM file_data WHERE file_name = '" + fname + "'")
@@ -59,12 +59,14 @@ def file_hash(fname):
 	return m.hexdigest()
 
 def send_files(files_to_send):
+	
 	output_file = config.get("local_settings", "output_file")
 	output_url = config.get("connection_settings", "output_url")
 	f = zipfile.ZipFile(output_file, "w")
 	for name in files_to_send:
 		f.write(name, os.path.basename(name), zipfile.ZIP_DEFLATED)
 	f.close()
+	return
 	f = open(output_file, 'rb')
 	put.putfile(f, output_url + output_file)
 	f.close()
@@ -88,10 +90,7 @@ file_directory = config.get("local_settings", "file_directory")
 file_directory = clean_directory(file_directory)
 fc = SimpleFormatCheck(schema_file, file_directory)
 
-if not fc.validate_files():
-	write_logs("invalid")
-	exit(0)
-
+fc.validate_files()
 valid_files = fc.get_valid_files()
 
 connection = sqlite3.connect(config.get("app_settings", "db_host"))
@@ -123,10 +122,13 @@ if len(files_to_send) > 0:
 		files_to_send.append(file_directory + xml_doc)
 	elif not xml_doc:
 		for f in default_files:
-			if file_directory + f not in files_to_send:
+			if (file_directory + f not in files_to_send) and (f in os.listdir(file_directory)):
 				files_to_send.append(file_directory + f)
+			elif f not in os.listdir(file_directory):
+				write_logs("invalid")
+				exit(0)
 	send_files(files_to_send)
 	write_logs("success")
-else:
+else :
 	write_logs("empty")
 
