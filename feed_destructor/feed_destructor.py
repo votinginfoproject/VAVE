@@ -52,15 +52,23 @@ def main():
 def process_files(feed_dir, archive_dir, vip_id, election_id, cursor, conn):
 
 	file_list = os.listdir(self.directory)
+	new_files = []
+	for f in file_list:
+		cursor.execute("SELECT hash FROM file_data WHERE file_name = '" + f + "' AND vip_id = " + str(vip_id) + " AND election_id = " str(election_id))
+		hash_val = cursor.fetchone()
+		new_hash = file_hash(feed_dir + f)
+		if not hash_val:
+			cursor.execute("INSERT INTO file_data (vip_id, election_id, file_name, hash) VALUES (" + str(vip_id) + "," + str(election_id) + ",'" + f + "','" + new_hash + "')")
+			new_files.append(f)
+		if new_hash != hash_val:
+			cursor.execute("UPDATE file_data SET hash = " + new_hash + " WHERE vip_id = " str(vip_id) + " and election_id = " + str(election_id))
+			new_files.append(f)
 
+	archive_files(feed_dir, archive_dir, new_files)
 	
-	#get new files
+	convert_files(directory, new_files, vip_id, election_id)
 
-	archive_files(feed_dir, archive_dir, file_list)
-	
-	convert_files(directory, file_list, vip_id, election_id)
-
-	update_db(directory, file_list)
+	update_db(directory, new_files)
 
 def archive_files(feed_dir, archive_dir, file_list):
 	cur_date = date.today().isoformat()
@@ -68,7 +76,7 @@ def archive_files(feed_dir, archive_dir, file_list):
 		element_name, extension = f.lower().split(".")
 		copyfile(feed_dir + f, archive_dir + element_name + "_" + str(cur_date) + ".txt")
 
-def md5Checksum(fname):
+def file_hash(fname):
 	with open(fname, "rb") as fh:
 		m = hashlib.md5()
 		for data in fh.read(8192):
