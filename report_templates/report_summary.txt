@@ -19,11 +19,12 @@ Type:
 Polling Hours:
 
 ----------------------
-File/Section Issues:
+File Report
 ----------------------
 
 Invalid Sections:
 Invalid Files:
+Valid Files:
 
 ----------------------
 Element Counts
