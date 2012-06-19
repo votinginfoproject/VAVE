@@ -17,10 +17,12 @@ import hashlib
 TEMP_DIR = "temp/"
 FEED_DIR = "feed_data/"
 ARCHIVE_DIR = "archived/"
+REPORT_DIR = "reports/"
 SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
 CONFIG_FILE = "vip.cfg"
 unpack_file = "test.tar.gz"
 DEFAULT_ELECTION_ID = 1000
+REQUIRED_FILES = ["source.txt", "election.txt"]
 
 def main():
 	
@@ -41,15 +43,18 @@ def main():
 	if len(xml_files) == 1:
 		ftff.feed_to_db_files(TEMP_DIR, TEMP_DIR + xml_files[0], sp.full_header_data("db"), sp.version)
 		os.remove(TEMP_DIR + xml_files[0])
-	
-	meta_conn = psycopg2.connect(host="localhost", database="vip_metadata", user="jensen", password="gamet1me")
-	meta_cursor = meta_conn.cursor(cursor_factory=extras.RealDictCursor)
 
-	vip_id, election_id = id_vals(TEMP_DIR, meta_cursor, meta_conn)
+	feed_details = id_vals(TEMP_DIR)
 
-	process_files(TEMP_DIR, ARCHIVE_DIR, vip_id, election_id, meta_cursor, meta_conn)
+	if "vip_id" not in feed_details or "election_id" not in feed_details:
+		report_missing_feed_details(feed_details)
+		return
 
-def process_files(feed_dir, archive_dir, vip_id, election_id, cursor, conn):
+	process_files(TEMP_DIR, ARCHIVE_DIR, vip_id, election_id)
+
+def process_files(feed_dir, archive_dir, vip_id, election_id):
+	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
+	cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
 
 	file_list = os.listdir(self.directory)
 	new_files = []
@@ -90,7 +95,7 @@ def file_hash(fname):
 
 def update_db(directory, files):
 
-	vip_conn = psycopg2.connect(host="localhost", database="vip", user="jensen", password="gamet1me")
+	vip_conn = psycopg2.connect(host="localhost", database="vip", user="username", password="password")
 	vip_cursor = vip_conn.cursor()
 	SQL_STATEMENT = "COPY {0}({1}) FROM '{2}' WITH CSV HEADER"
 
@@ -101,18 +106,29 @@ def update_db(directory, files):
 		vip_cursor.copy_expert(copy_statement, sys.stdin)
 		vip_conn.commit()
 
-def id_vals(directory, cursor, conn):
-	with open(directory + "source.txt", "r") as f:
-		fdata = csv.DictReader(f)
-		for row in fdata:
-			vip_id = row["vip_id"]
-	with open(directory + "election.txt", "r") as f:
-		fdata = csv.DictReader(f)
-		for row in fdata:
-			election_date = row["date"]
-			election_type = row["election_type"]
+def get_feed_details(directory):
+
+	feed_details = {}
+
+	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
+	cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
 	
-	cursor.execute("SELECT * FROM elections WHERE vip_id = " + str(vip_id) + " AND election_date = '" + election_date + "' AND election_type = '" + election_type + "'")
+	try:
+		with open(directory + "source.txt", "r") as f:
+			fdata = csv.DictReader(f)
+			for row in fdata:
+				feed_details["vip_id"] = row["vip_id"]
+				feed_details["name"] = row["name"]
+				feed_details["datetime"] = row["datetime"]
+		with open(directory + "election.txt", "r") as f:
+			fdata = csv.DictReader(f)
+			for row in fdata:
+				feed_details["election_date"] = row["date"]
+				feed_details["election_type"] = row["election_type"]
+	except:
+		return feed_details
+	
+	cursor.execute("SELECT * FROM elections WHERE vip_id = " + str(feed_details["vip_id"]) + " AND election_date = '" + feed_details["election_date"] + "' AND election_type = '" + feed_details["election_type"] + "'")
 	election_data = cursor.fetchone()
 	if not election_data:
 		cursor.execute("SELECT GREATEST(election_id) FROM elections")
@@ -121,13 +137,14 @@ def id_vals(directory, cursor, conn):
 			new_id = DEFAULT_ELECTION_ID
 		else:
 			new_id = int(last_id) + 1
-		cursor.execute("INSERT INTO elections (vip_id, election_date, election_type, election_id) VALUES (" + str(vip_id) + "," + election_date + "," + election_type + "," + str(new_id) + ")")
+		cursor.execute("INSERT INTO elections (vip_id, election_date, election_type, election_id) VALUES (" + str(feed_details["vip_id"]) + "," + feed_details["election_date"] + "," + feed_details["election_type"] + "," + str(new_id) + ")")
 		conn.commit()
-		return vip_id, election_id
+		feed_details["election_id"] = new_id
+		return feed_details
 	else:
-		return vip_id, election_data["election_id"]
+		feed_details["election_id"] = election_data["election_id"]
+		return feed_details
 
-	
 def clear_directory(directory):
 
 	if not os.path.exists(directory):
