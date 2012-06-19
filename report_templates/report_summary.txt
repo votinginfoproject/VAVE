@@ -13,10 +13,9 @@ Contact Email:
 Election Data
 ----------------------
 
-State:
-Date:
-Type:
-Polling Hours:
+Election ID:
+Election Date:
+Election Type:
 
 ----------------------
 File Report
