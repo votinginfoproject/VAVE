@@ -1,6 +1,15 @@
 File Validated:
 
 ----------------------
+Source Data
+----------------------
+
+Name:
+Vip ID:
+Datetime:
+Contact Email:
+
+----------------------
 Election Data
 ----------------------
 
@@ -10,30 +19,55 @@ Type:
 Polling Hours:
 
 ----------------------
-Source Data
+File/Section Issues:
 ----------------------
 
-Name:
-Datetime:
-Contact Email:
+Invalid Sections:
+Invalid Files:
 
 ----------------------
-Element Count
+Element Counts
 ----------------------
 
-source:
-election:
-state:
-locality:
-precinct:
-precint_split:
-election_administration:
-election_official:
-polling_location:
-street_segment:
-contest:
-ballot:
-candidate:
+source
+    - original:
+    - processed:
+election
+    - original:
+    - processed:
+state
+    - original:
+    - processed:
+locality
+    - original:
+    - processed:
+precinct
+    - original:
+    - processed:
+precint_split
+    - original:
+    - processed:
+election_administration
+    - original:
+    - processed:
+election_official
+    - original:
+    - processed:
+polling_location
+    - original:
+    - processed:
+street_segment
+    - original:
+    - processed:
+contest
+    - original:
+    - processed:
+ballot
+    - original:
+    - processed:
+candidate
+    - original:
+    - processed:
 
 ----------------------
 Reported Issues Count
