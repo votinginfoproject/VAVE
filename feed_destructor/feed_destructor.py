@@ -70,6 +70,11 @@ def process_files(feed_dir, archive_dir, vip_id, election_id, cursor, conn):
 
 	update_db(directory, new_files)
 
+def convert_files(directory, new_files, vip_id, election_id):
+	
+	for f in new_files:
+		filename, extension = f.split(".")
+
 def archive_files(feed_dir, archive_dir, file_list):
 	cur_date = date.today().isoformat()
 	for f in file_list:
@@ -221,7 +226,6 @@ def convert_data(directory, fname, element, conversion_dict):
 		header_list = []
 		for h in header:
 			if h in element_conversion:
-				#need to figure out which (key or value) is being pulled for the header name
 				header_list.append(element_conversion[h])
 				output_list.append(h)
 		with open(directory + element + "_temp.txt", "w") as w:
@@ -233,33 +237,6 @@ def convert_data(directory, fname, element, conversion_dict):
 				w.write(",".join(row_data) + "\n")		
 	os.remove(directory + fname)
 	os.rename(directory + element + "_temp.txt", directory + fname)
-
-def write_and_archive(valid_files, vip_id):
-	
-	feed_dir = FEED_DIR + vip_id
-	setup_dir(feed_dir)
-	archive_dir = ARCHIVE_DIR + vip_id
-	setup_dir(archive_dir)
-	
-	file_list = os.listdir(self.directory)
-	
-	for fname in valid_files:
-		if fname in file_list:
-			if file_hash(TEMP_DIR + fname) == file_hash(feed_dir + fname):
-				continue 
-			else:
-				date_created = os.stat(feed_dir + fname).st_ctime
-				os.rename(feed_dir + fname, archive_dir + fname[:fname.rfind(".")] + "_" + str(int(os.path.getctime(feed_dir+fname))) + ".txt")
-				os.rename(TEMP_DIR + fname, feed_dir + fname)
-		else:
-			os.rename(TEMP_DIR + fname, feed_dir + fname)
-
-def file_hash(fname):
-	with open(fname, "rb") as fh:
-		m = md5()
-		for data in fh.read(8192):
-			m.update(data)
-	return m.hexdigest()
 
 if __name__ == "__main__":
 	main()
