@@ -14,10 +14,7 @@ from datetime import date
 from shutil import copyfile
 import hashlib
 
-TEMP_DIR = "temp/"
-FEED_DIR = "feed_data/"
-ARCHIVE_DIR = "archived/"
-REPORT_DIR = "reports/"
+DIRECTORIES = {"temp":"temp/", "feeds":"feed_data/", "archives":"archives/", "reports":"reports/"}
 SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
 CONFIG_FILE = "vip.cfg"
 unpack_file = "test.tar.gz"
@@ -26,31 +23,45 @@ REQUIRED_FILES = ["source.txt", "election.txt"]
 
 def main():
 	
-	clear_directory(TEMP_DIR)
+	setup_directories()
 
 	ftype = ft.get_type(unpack_file)
 
-	unpack.unpack(unpack_file, TEMP_DIR)
-	unpack.flatten_folder(TEMP_DIR)
+	unpack.unpack(unpack_file, DIRECTORIES["temp"])
+	unpack.flatten_folder(DIRECTORIES["temp"])
 
 	sp = SchemaProps()
 
-	if ds.file_by_name(CONFIG_FILE, TEMP_DIR):
-		print "Invalid sections: " + str(process_config(TEMP_DIR, TEMP_DIR + CONFIG_FILE, sp))
-	if ds.files_by_extension(".txt", TEMP_DIR) > 0:
-		print "Invalid files: " + str(process_flatfiles(TEMP_DIR, sp))
-	xml_files = ds.files_by_extension(".xml", TEMP_DIR)
+	if ds.file_by_name(CONFIG_FILE, DIRECTORIES["temp"]):
+		print "Invalid sections: " + str(process_config(DIRECTORIES["temp"], DIRECTORIES["temp"] + CONFIG_FILE, sp))
+	if ds.files_by_extension(".txt", DIRECTORIES["temp"]) > 0:
+		print "Invalid files: " + str(process_flatfiles(DIRECTORIES["temp"], sp))
+	xml_files = ds.files_by_extension(".xml", DIRECTORIES["temp"])
 	if len(xml_files) == 1:
-		ftff.feed_to_db_files(TEMP_DIR, TEMP_DIR + xml_files[0], sp.full_header_data("db"), sp.version)
-		os.remove(TEMP_DIR + xml_files[0])
+		ftff.feed_to_db_files(DIRECTORIES["temp"], DIRECTORIES["temp"] + xml_files[0], sp.full_header_data("db"), sp.version)
+		os.remove(DIRECTORIES["temp"] + xml_files[0])
 
-	feed_details = id_vals(TEMP_DIR)
+	feed_details = id_vals(DIRECTORIES["temp"])
 
 	if "vip_id" not in feed_details or "election_id" not in feed_details:
 		report_missing_feed_details(feed_details)
 		return
 
-	process_files(TEMP_DIR, ARCHIVE_DIR, vip_id, election_id)
+	process_files(DIRECTORIES["temp"], DIRECTORIES["archives"], vip_id, election_id)
+
+def setup_directories():
+	for directory in DIRECTORIES:
+		if not os.path.exists(DIRECTORIES[directory])
+			os.mkdir(DIRECTORIES[directory])
+		elif directory == "temp"
+			clear_directory(DIRECTORIES[directory])
+
+def clear_directory(directory):
+	for root, dirs, files in os.walk(directory):
+		for f in files:
+			os.unlink(os.path.join(root, f))
+		for d in dirs:
+			rmtree(os.path.join(root, d))
 
 def process_files(feed_dir, archive_dir, vip_id, election_id):
 	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
@@ -145,17 +156,6 @@ def get_feed_details(directory):
 		feed_details["election_id"] = election_data["election_id"]
 		return feed_details
 
-def clear_directory(directory):
-
-	if not os.path.exists(directory):
-		os.mkdir(directory)
-		return
-
-	for root, dirs, files in os.walk(directory):
-		for f in files:
-			os.unlink(os.path.join(root, f))
-		for d in dirs:
-			rmtree(os.path.join(root, d))
 
 #add in header to all valid formatted files, delete invalid files
 def process_config(directory, config_file, schema_props):
@@ -212,6 +212,8 @@ def process_flatfiles(directory, schema_props):
 				convert_data(directory, k, v, schema_props.conversion_by_element(v))
 	return invalid_files
 
+#converts data from element format to db format. Currently opens and reads
+#through the whole file each time, splitting on each row was actually slower
 def convert_data(directory, fname, element, conversion_dict):
 	for conversion in conversion_dict:
 		if conversion == element:
