@@ -13,6 +13,7 @@ from psycopg2 import extras
 from datetime import date
 from shutil import copyfile
 import hashlib
+from datetime import datetime
 
 DIRECTORIES = {"temp":"temp/", "feeds":"feed_data/", "archives":"archives/", "reports":"reports/"}
 SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
@@ -20,6 +21,8 @@ CONFIG_FILE = "vip.cfg"
 unpack_file = "test.tar.gz"
 DEFAULT_ELECTION_ID = 1000
 REQUIRED_FILES = ["source.txt", "election.txt"]
+process_time = datetime.now()
+file_time_stamp = process_time[:process_time.rfind(".")].replace(":","-").replace(" ","_")
 
 def main():
 	
@@ -31,29 +34,38 @@ def main():
 	unpack.flatten_folder(DIRECTORIES["temp"])
 
 	sp = SchemaProps()
+	invalid_sections = []
+	invalid_files = []
+	valid_files = []
 
 	if ds.file_by_name(CONFIG_FILE, DIRECTORIES["temp"]):
-		print "Invalid sections: " + str(process_config(DIRECTORIES["temp"], DIRECTORIES["temp"] + CONFIG_FILE, sp))
+		invalid_sections = process_config(DIRECTORIES["temp"], DIRECTORIES["temp"] + CONFIG_FILE, sp)
 	if ds.files_by_extension(".txt", DIRECTORIES["temp"]) > 0:
-		print "Invalid files: " + str(process_flatfiles(DIRECTORIES["temp"], sp))
+		invalid_files, valid_files = process_flatfiles(DIRECTORIES["temp"], sp)
 	xml_files = ds.files_by_extension(".xml", DIRECTORIES["temp"])
-	if len(xml_files) == 1:
+	if len(xml_files) >= 1:
 		ftff.feed_to_db_files(DIRECTORIES["temp"], DIRECTORIES["temp"] + xml_files[0], sp.full_header_data("db"), sp.version)
 		os.remove(DIRECTORIES["temp"] + xml_files[0])
 
 	feed_details = id_vals(DIRECTORIES["temp"])
 
-	if "vip_id" not in feed_details or "election_id" not in feed_details:
-		report_missing_feed_details(feed_details)
+	if "vip_id" not in feed_details:
+		report_missing_source(feed_details)
+		return
+	elif "election_id" not in feed_details:
+		report_missing_election(feed_details)
+		return 
+	elif len(xml_file) > 1:
+		report_multiple_xml(feed_details, valid_files, invalid_files, invalid_sections)
 		return
 
 	process_files(DIRECTORIES["temp"], DIRECTORIES["archives"], vip_id, election_id)
 
 def setup_directories():
 	for directory in DIRECTORIES:
-		if not os.path.exists(DIRECTORIES[directory])
+		if not os.path.exists(DIRECTORIES[directory]):
 			os.mkdir(DIRECTORIES[directory])
-		elif directory == "temp"
+		if directory == "temp":
 			clear_directory(DIRECTORIES[directory])
 
 def clear_directory(directory):
@@ -63,8 +75,39 @@ def clear_directory(directory):
 		for d in dirs:
 			rmtree(os.path.join(root, d))
 
+def report_missing_source(feed_details):
+	if not os.path.exists(DIRECTORIES["reports"] + "unknown"):
+		os.mkdir(DIRECTORIES["reports"] + "unknown")
+	with open(DIRECTORIES["reports"] + "unknown/report_summary_" + file_time_stamp + ".txt", "w") as w:
+		w.write("File Processed: " + unpack_file + "\n")
+		w.write("Time Processed: " + process_time + "\n\n")
+		w.write("Missing source information, could not process feed")
+
+def report_missing_election(feed_details):
+	directory = DIRECTORIES["reports"] + str(feed_details["vip_id"])
+	fname = "report_summary_" + str(feed_details["vip_id"]) + file_time_stamp + ".txt"
+	if not os.path.exists(directory):
+		os.mkdir(directory)
+		os.mkdir(directory + "/archives")
+		os.mkdir(directory + "/current")
+	else:
+		clear_directory(directory + "/current")
+	with open(directory + "/current/" + fname, "w") as w:
+		w.write("File Processed: " + unpack_file + "\n")
+		w.write("Time Processed: " + process_time + "\n\n")
+		w.write("----------------------\nSource Data\n----------------------\n\n")
+		w.write("Name: " + feed_details["name"] + "\n")
+		w.write("Vip ID: " + str(feed_details["vip_id"]) + "\n")
+		w.write("Datetime: " + str(feed_details["datetime"]) + "\n\n")
+		w.write("Missing election information, could not process feed")
+	copyfile(directory + "/current/" + fname, directory + "/archives" + fname)	
+
+def report_multiple_xml(feed_details, valid_files, invalid_files, invalid_sections):
+	print feed_details
+		
 def process_files(feed_dir, archive_dir, vip_id, election_id):
 	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
+
 	cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
 
 	file_list = os.listdir(self.directory)
@@ -105,7 +148,6 @@ def file_hash(fname):
 	return m.hexdigest()
 
 def update_db(directory, files):
-
 	vip_conn = psycopg2.connect(host="localhost", database="vip", user="username", password="password")
 	vip_cursor = vip_conn.cursor()
 	SQL_STATEMENT = "COPY {0}({1}) FROM '{2}' WITH CSV HEADER"
@@ -120,7 +162,6 @@ def update_db(directory, files):
 def get_feed_details(directory):
 
 	feed_details = {}
-
 	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
 	cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
 	
@@ -209,12 +250,13 @@ def process_flatfiles(directory, schema_props):
 			if k in invalid_files:
 				os.remove(directory + k)
 			else:
-				convert_data(directory, k, v, schema_props.conversion_by_element(v))
+				valid_files = convert_data(directory, k, v, schema_props.conversion_by_element(v))
 	return invalid_files
 
 #converts data from element format to db format. Currently opens and reads
 #through the whole file each time, splitting on each row was actually slower
 def convert_data(directory, fname, element, conversion_dict):
+	files_used = []
 	for conversion in conversion_dict:
 		if conversion == element:
 			continue
@@ -228,6 +270,7 @@ def convert_data(directory, fname, element, conversion_dict):
 					header_list.append(conversion_dict[conversion][h])
 					output_list.append(h)
 			if len(output_list) > 1:
+				files_used.append(conversion + ".txt")
 				print "processing " + conversion
 				with open(directory + conversion + ".txt", "w") as w:
 					w.write(",".join(header_list) + "\n")
@@ -237,7 +280,8 @@ def convert_data(directory, fname, element, conversion_dict):
 							row_data.append(row[o])
 						w.write(",".join(row_data) + "\n")
 	element_conversion = conversion_dict[element]
-	print "processing " + element		
+	print "processing " + element
+	files_used.append(element + ".txt")	
 	with open(directory + fname, "r") as f:
 		fdata = csv.DictReader(f)
 		header = fdata.fieldnames
