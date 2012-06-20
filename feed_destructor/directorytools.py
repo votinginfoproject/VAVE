@@ -1,5 +1,6 @@
 import re
-from os import walk, getcwd
+from os import walk, getcwd, path, mkdir, unlink
+from shutil import rmtree
 
 default_dir = getcwd()
 
@@ -73,3 +74,25 @@ def find_folders(regex, directory=default_dir):
 
 def folder_list(directory=default_dir):
     return find_folders(re.compile(".*"), directory)
+
+def create_directory(directory):
+    if not path.exists(directory):
+        mkdir(directory)
+
+def clear_directory(directory):
+    if not path.exists(directory):
+        return
+    for root, dirs, files in walk(directory):
+        for f in files:
+            unlink(path.join(root, f))
+        for d in dirs:
+            rmtree(path.join(root, d))
+
+def clear_or_create(directory):
+    create_directory(directory)
+    clear_directory(directory)
+
+#add other directory name cleaning operations as they come up
+def clean_dir_name(directory):
+    if not directory.endswith("/"):
+        return directory + "/"
