@@ -1,7 +1,7 @@
 import os
 from hashlib import md5
 import filetype as ft
-import directorysearch as ds
+import directorytools as dt
 import unpack
 import formatcheck as fc
 import feedtoflatfiles as ftff
@@ -10,7 +10,6 @@ from ConfigParser import ConfigParser
 import psycopg2
 import csv
 from psycopg2 import extras
-from datetime import date
 from shutil import copyfile
 import hashlib
 from datetime import datetime
@@ -23,6 +22,8 @@ DEFAULT_ELECTION_ID = 1000
 REQUIRED_FILES = ["source.txt", "election.txt"]
 process_time = str(datetime.now())
 file_time_stamp = process_time[:process_time.rfind(".")].replace(":","-").replace(" ","_")
+
+#TODO:Place reporting code into a module
 
 def main():
 	
@@ -38,11 +39,11 @@ def main():
 	invalid_files = []
 	valid_files = []
 
-	if ds.file_by_name(CONFIG_FILE, DIRECTORIES["temp"]):
+	if dt.file_by_name(CONFIG_FILE, DIRECTORIES["temp"]):
 		invalid_sections = process_config(DIRECTORIES["temp"], DIRECTORIES["temp"] + CONFIG_FILE, sp)
-	if ds.files_by_extension(".txt", DIRECTORIES["temp"]) > 0:
+	if dt.files_by_extension(".txt", DIRECTORIES["temp"]) > 0:
 		invalid_files, valid_files = process_flatfiles(DIRECTORIES["temp"], sp)
-	xml_files = ds.files_by_extension(".xml", DIRECTORIES["temp"])
+	xml_files = dt.files_by_extension(".xml", DIRECTORIES["temp"])
 	if len(xml_files) >= 1:
 		ftff.feed_to_db_files(DIRECTORIES["temp"], DIRECTORIES["temp"] + xml_files[0], sp.full_header_data("db"), sp.version)
 		os.remove(DIRECTORIES["temp"] + xml_files[0])
@@ -61,24 +62,10 @@ def main():
 
 	process_files(DIRECTORIES["temp"], DIRECTORIES["archives"], vip_id, election_id)
 
-def setup_directories():
-	for directory in DIRECTORIES:
-		if not os.path.exists(DIRECTORIES[directory]):
-			os.mkdir(DIRECTORIES[directory])
-		if directory == "temp":
-			clear_directory(DIRECTORIES[directory])
-
-def clear_directory(directory):
-	for root, dirs, files in os.walk(directory):
-		for f in files:
-			os.unlink(os.path.join(root, f))
-		for d in dirs:
-			rmtree(os.path.join(root, d))
-
 def report_missing_source(feed_details, valid_files, invalid_files, invalid_sections):
-	if not os.path.exists(DIRECTORIES["reports"] + "unknown"):
-		os.mkdir(DIRECTORIES["reports"] + "unknown")
-	with open(DIRECTORIES["reports"] + "unknown/report_summary_" + file_time_stamp + ".txt", "w") as w:
+	directory = DIRECTORIES["reports"] + "unknown"
+	dt.create_directory(directory)
+	with open(directory + "/report_summary_" + file_time_stamp + ".txt", "w") as w:
 		w.write("File Processed: " + unpack_file + "\n")
 		w.write("Time Processed: " + process_time + "\n\n")
 		w.write("----------------------\nFile Report\n----------------------\n\n")
@@ -93,12 +80,11 @@ def report_missing_source(feed_details, valid_files, invalid_files, invalid_sect
 def report_missing_election(feed_details, valid_files, invalid_files, invalid_sections):
 	directory = DIRECTORIES["reports"] + str(feed_details["vip_id"])
 	fname = "report_summary_" + str(feed_details["vip_id"]) + "_" + file_time_stamp + ".txt"
-	if not os.path.exists(directory):
-		os.mkdir(directory)
-		os.mkdir(directory + "/archives")
-		os.mkdir(directory + "/current")
-	else:
-		clear_directory(directory + "/current")
+	
+	dt.create_directory(directory)
+	dt.create_directory(directory + "/archives")
+	dt.clear_or_create(directory + "/current")
+	
 	with open(directory + "/current/" + fname, "w") as w:
 		w.write("File Processed: " + unpack_file + "\n")
 		w.write("Time Processed: " + process_time + "\n\n")
@@ -119,12 +105,9 @@ def report_missing_election(feed_details, valid_files, invalid_files, invalid_se
 def report_multiple_xml(feed_details, valid_files, invalid_files, invalid_sections):
 	directory = DIRECTORIES["reports"] + str(feed_details["vip_id"])
 	fname = "report_summary_" + str(feed_details["vip_id"]) + "_" + feed_details["election_id"] + "_" + file_time_stamp + ".txt"
-	if not os.path.exists(directory):
-		os.mkdir(directory)
-		os.mkdir(directory + "/archives")
-		os.mkdir(directory + "/current")
-	else:
-		clear_directory(directory + "/current")
+	dt.create_directory(directory)
+	dt.create_directory(directory + "/archives")
+	dt.clear_or_create(directory + "/current")	
 	with open(directory + "/current/" + fname, "w") as w:
 		w.write("File Processed: " + unpack_file + "\n")
 		w.write("Time Processed: " + process_time + "\n\n")
@@ -148,8 +131,7 @@ def report_multiple_xml(feed_details, valid_files, invalid_files, invalid_sectio
 	print feed_details
 		
 def process_files(feed_dir, archive_dir, vip_id, election_id):
-#	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
-	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="jensen", password="gamet1me")
+	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
 	cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
 
 	file_list = os.listdir(self.directory)
@@ -190,8 +172,7 @@ def file_hash(fname):
 	return m.hexdigest()
 
 def update_db(directory, files):
-#	vip_conn = psycopg2.connect(host="localhost", database="vip", user="username", password="password")
-	vip_conn = psycopg2.connect(host="localhost", database="vip", user="jensen", password="gamet1me")
+	vip_conn = psycopg2.connect(host="localhost", database="vip", user="username", password="password")
 	vip_cursor = vip_conn.cursor()
 	SQL_STATEMENT = "COPY {0}({1}) FROM '{2}' WITH CSV HEADER"
 
@@ -205,8 +186,7 @@ def update_db(directory, files):
 def get_feed_details(directory):
 
 	feed_details = {}
-#	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
-	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="jensen", password="gamet1me")
+	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
 	cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
 	
 	try:
