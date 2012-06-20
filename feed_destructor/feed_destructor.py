@@ -21,7 +21,7 @@ CONFIG_FILE = "vip.cfg"
 unpack_file = "test.tar.gz"
 DEFAULT_ELECTION_ID = 1000
 REQUIRED_FILES = ["source.txt", "election.txt"]
-process_time = datetime.now()
+process_time = str(datetime.now())
 file_time_stamp = process_time[:process_time.rfind(".")].replace(":","-").replace(" ","_")
 
 def main():
@@ -50,10 +50,10 @@ def main():
 	feed_details = id_vals(DIRECTORIES["temp"])
 
 	if "vip_id" not in feed_details:
-		report_missing_source(feed_details)
+		report_missing_source(feed_details, valid_files, invalid_files, invalid_sections)
 		return
 	elif "election_id" not in feed_details:
-		report_missing_election(feed_details)
+		report_missing_election(feed_details, valid_files, invalid_files, invalid_sections)
 		return 
 	elif len(xml_file) > 1:
 		report_multiple_xml(feed_details, valid_files, invalid_files, invalid_sections)
@@ -75,17 +75,24 @@ def clear_directory(directory):
 		for d in dirs:
 			rmtree(os.path.join(root, d))
 
-def report_missing_source(feed_details):
+def report_missing_source(feed_details, valid_files, invalid_files, invalid_sections):
 	if not os.path.exists(DIRECTORIES["reports"] + "unknown"):
 		os.mkdir(DIRECTORIES["reports"] + "unknown")
 	with open(DIRECTORIES["reports"] + "unknown/report_summary_" + file_time_stamp + ".txt", "w") as w:
 		w.write("File Processed: " + unpack_file + "\n")
 		w.write("Time Processed: " + process_time + "\n\n")
+		w.write("----------------------\nFile Report\n----------------------\n\n")
+		if len(invalid_sections) > 0:
+			w.write("Invalid Sections: " + str(invalid_sections) + "\n")
+		if len(invalid_files) > 0:
+			w.write("Invalid Files: " + str(invalid_files) + "\n")
+		if len(valid_files) > 0:
+			w.write("Valid Files: " + str(valid_files) + "\n")
 		w.write("Missing source information, could not process feed")
 
-def report_missing_election(feed_details):
+def report_missing_election(feed_details, valid_files, invalid_files, invalid_sections):
 	directory = DIRECTORIES["reports"] + str(feed_details["vip_id"])
-	fname = "report_summary_" + str(feed_details["vip_id"]) + file_time_stamp + ".txt"
+	fname = "report_summary_" + str(feed_details["vip_id"]) + "_" + file_time_stamp + ".txt"
 	if not os.path.exists(directory):
 		os.mkdir(directory)
 		os.mkdir(directory + "/archives")
@@ -99,28 +106,63 @@ def report_missing_election(feed_details):
 		w.write("Name: " + feed_details["name"] + "\n")
 		w.write("Vip ID: " + str(feed_details["vip_id"]) + "\n")
 		w.write("Datetime: " + str(feed_details["datetime"]) + "\n\n")
+		w.write("----------------------\nFile Report\n----------------------\n\n")
+		if len(invalid_sections) > 0:
+			w.write("Invalid Sections: " + str(invalid_sections) + "\n")
+		if len(invalid_files) > 0:
+			w.write("Invalid Files: " + str(invalid_files) + "\n")
+		if len(valid_files) > 0:
+			w.write("Valid Files: " + str(valid_files) + "\n")
 		w.write("Missing election information, could not process feed")
 	copyfile(directory + "/current/" + fname, directory + "/archives" + fname)	
 
 def report_multiple_xml(feed_details, valid_files, invalid_files, invalid_sections):
+	directory = DIRECTORIES["reports"] + str(feed_details["vip_id"])
+	fname = "report_summary_" + str(feed_details["vip_id"]) + "_" + feed_details["election_id"] + "_" + file_time_stamp + ".txt"
+	if not os.path.exists(directory):
+		os.mkdir(directory)
+		os.mkdir(directory + "/archives")
+		os.mkdir(directory + "/current")
+	else:
+		clear_directory(directory + "/current")
+	with open(directory + "/current/" + fname, "w") as w:
+		w.write("File Processed: " + unpack_file + "\n")
+		w.write("Time Processed: " + process_time + "\n\n")
+		w.write("----------------------\nSource Data\n----------------------\n\n")
+		w.write("Name: " + feed_details["name"] + "\n")
+		w.write("Vip ID: " + str(feed_details["vip_id"]) + "\n")
+		w.write("Datetime: " + str(feed_details["datetime"]) + "\n\n")
+		w.write("----------------------\nElection Data\n----------------------\n\n")
+		w.write("Election ID: " + feed_details["election_id"] + "\n")
+		w.write("Election Date: " + str(feed_details["election_date"]) + "\n")
+		w.write("Election Type: " + str(feed_details["election_type"]) + "\n\n")
+		w.write("----------------------\nFile Report\n----------------------\n\n")
+		if len(invalid_sections) > 0:
+			w.write("Invalid Sections: " + str(invalid_sections) + "\n")
+		if len(invalid_files) > 0:
+			w.write("Invalid Files: " + str(invalid_files) + "\n")
+		if len(valid_files) > 0:
+			w.write("Valid Files: " + str(valid_files) + "\n")
+		w.write("Multiple xml files provided, could not process feed")
+	copyfile(directory + "/current/" + fname, directory + "/archives" + fname)
 	print feed_details
 		
 def process_files(feed_dir, archive_dir, vip_id, election_id):
-	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
-
+#	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
+	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="jensen", password="gamet1me")
 	cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
 
 	file_list = os.listdir(self.directory)
 	new_files = []
 	for f in file_list:
-		cursor.execute("SELECT hash FROM file_data WHERE file_name = '" + f + "' AND vip_id = " + str(vip_id) + " AND election_id = " str(election_id))
+		cursor.execute("SELECT hash FROM file_data WHERE file_name = '" + f + "' AND vip_id = " + str(vip_id) + " AND election_id = " + str(election_id))
 		hash_val = cursor.fetchone()
 		new_hash = file_hash(feed_dir + f)
 		if not hash_val:
 			cursor.execute("INSERT INTO file_data (vip_id, election_id, file_name, hash) VALUES (" + str(vip_id) + "," + str(election_id) + ",'" + f + "','" + new_hash + "')")
 			new_files.append(f)
 		if new_hash != hash_val:
-			cursor.execute("UPDATE file_data SET hash = " + new_hash + " WHERE vip_id = " str(vip_id) + " and election_id = " + str(election_id))
+			cursor.execute("UPDATE file_data SET hash = " + new_hash + " WHERE vip_id = " + str(vip_id) + " and election_id = " + str(election_id))
 			new_files.append(f)
 
 	archive_files(feed_dir, archive_dir, new_files)
@@ -148,7 +190,8 @@ def file_hash(fname):
 	return m.hexdigest()
 
 def update_db(directory, files):
-	vip_conn = psycopg2.connect(host="localhost", database="vip", user="username", password="password")
+#	vip_conn = psycopg2.connect(host="localhost", database="vip", user="username", password="password")
+	vip_conn = psycopg2.connect(host="localhost", database="vip", user="jensen", password="gamet1me")
 	vip_cursor = vip_conn.cursor()
 	SQL_STATEMENT = "COPY {0}({1}) FROM '{2}' WITH CSV HEADER"
 
@@ -162,7 +205,8 @@ def update_db(directory, files):
 def get_feed_details(directory):
 
 	feed_details = {}
-	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
+#	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
+	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="jensen", password="gamet1me")
 	cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
 	
 	try:
