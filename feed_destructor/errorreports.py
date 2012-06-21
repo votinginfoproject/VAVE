@@ -31,7 +31,7 @@ def report_summary(feed_details, valid_files, invalid_files, invalid_sections):
 		copyfile(directory + "current/" + fname, directory + "archives/" + fname)
 
 def summary_header(feed_details, writer):
-	writer.write("File Processed: " + feed_details["unpack_file"] + "\n")
+	writer.write("File Processed: " + feed_details["file"] + "\n")
 	writer.write("Time Processed: " + feed_details["process_time"] + "\n\n")
 
 def file_summary(valid_files, invalid_files, invalid_sections, writer):
