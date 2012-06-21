@@ -5,6 +5,7 @@ import directorytools as dt
 import unpack
 import formatcheck as fc
 import feedtoflatfiles as ftff
+import errorreports as er
 from schemaprops import SchemaProps
 from ConfigParser import ConfigParser
 import psycopg2
@@ -14,7 +15,7 @@ from shutil import copyfile
 import hashlib
 from datetime import datetime
 
-DIRECTORIES = {"temp":"temp/", "feeds":"feed_data/", "archives":"archives/", "reports":"reports/"}
+DIRECTORIES = {"temp":"temp/", "archives":"archives/"}
 SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
 CONFIG_FILE = "vip.cfg"
 unpack_file = "test.tar.gz"
@@ -27,7 +28,8 @@ file_time_stamp = process_time[:process_time.rfind(".")].replace(":","-").replac
 
 def main():
 	
-	setup_directories()
+	dt.create_or_clear("temp/")
+	dt.create_directory("archives/")
 
 	ftype = ft.get_type(unpack_file)
 
@@ -35,6 +37,7 @@ def main():
 	unpack.flatten_folder(DIRECTORIES["temp"])
 
 	sp = SchemaProps()
+	feed_details = {"file":unpack_file, "process_time":process_time, "file_time_stamp":file_time_stamp}
 	invalid_sections = []
 	invalid_files = []
 	valid_files = []
@@ -48,88 +51,12 @@ def main():
 		ftff.feed_to_db_files(DIRECTORIES["temp"], DIRECTORIES["temp"] + xml_files[0], sp.full_header_data("db"), sp.version)
 		os.remove(DIRECTORIES["temp"] + xml_files[0])
 
-	feed_details = id_vals(DIRECTORIES["temp"])
+	feed_details.update(id_vals(DIRECTORIES["temp"]))
 
-	if "vip_id" not in feed_details:
-		report_missing_source(feed_details, valid_files, invalid_files, invalid_sections)
-		return
-	elif "election_id" not in feed_details:
-		report_missing_election(feed_details, valid_files, invalid_files, invalid_sections)
-		return 
-	elif len(xml_file) > 1:
-		report_multiple_xml(feed_details, valid_files, invalid_files, invalid_sections)
+	if "vip_id" not in feed_details or "election_id" not in feed_details:
+		er.feed_summary(feed_details, valid_files, invalid_files, invalid_sections)
 		return
 
-	process_files(DIRECTORIES["temp"], DIRECTORIES["archives"], vip_id, election_id)
-
-def report_missing_source(feed_details, valid_files, invalid_files, invalid_sections):
-	directory = DIRECTORIES["reports"] + "unknown"
-	dt.create_directory(directory)
-	with open(directory + "/report_summary_" + file_time_stamp + ".txt", "w") as w:
-		w.write("File Processed: " + unpack_file + "\n")
-		w.write("Time Processed: " + process_time + "\n\n")
-		w.write("----------------------\nFile Report\n----------------------\n\n")
-		if len(invalid_sections) > 0:
-			w.write("Invalid Sections: " + str(invalid_sections) + "\n")
-		if len(invalid_files) > 0:
-			w.write("Invalid Files: " + str(invalid_files) + "\n")
-		if len(valid_files) > 0:
-			w.write("Valid Files: " + str(valid_files) + "\n")
-		w.write("Missing source information, could not process feed")
-
-def report_missing_election(feed_details, valid_files, invalid_files, invalid_sections):
-	directory = DIRECTORIES["reports"] + str(feed_details["vip_id"])
-	fname = "report_summary_" + str(feed_details["vip_id"]) + "_" + file_time_stamp + ".txt"
-	
-	dt.create_directory(directory)
-	dt.create_directory(directory + "/archives")
-	dt.clear_or_create(directory + "/current")
-	
-	with open(directory + "/current/" + fname, "w") as w:
-		w.write("File Processed: " + unpack_file + "\n")
-		w.write("Time Processed: " + process_time + "\n\n")
-		w.write("----------------------\nSource Data\n----------------------\n\n")
-		w.write("Name: " + feed_details["name"] + "\n")
-		w.write("Vip ID: " + str(feed_details["vip_id"]) + "\n")
-		w.write("Datetime: " + str(feed_details["datetime"]) + "\n\n")
-		w.write("----------------------\nFile Report\n----------------------\n\n")
-		if len(invalid_sections) > 0:
-			w.write("Invalid Sections: " + str(invalid_sections) + "\n")
-		if len(invalid_files) > 0:
-			w.write("Invalid Files: " + str(invalid_files) + "\n")
-		if len(valid_files) > 0:
-			w.write("Valid Files: " + str(valid_files) + "\n")
-		w.write("Missing election information, could not process feed")
-	copyfile(directory + "/current/" + fname, directory + "/archives" + fname)	
-
-def report_multiple_xml(feed_details, valid_files, invalid_files, invalid_sections):
-	directory = DIRECTORIES["reports"] + str(feed_details["vip_id"])
-	fname = "report_summary_" + str(feed_details["vip_id"]) + "_" + feed_details["election_id"] + "_" + file_time_stamp + ".txt"
-	dt.create_directory(directory)
-	dt.create_directory(directory + "/archives")
-	dt.clear_or_create(directory + "/current")	
-	with open(directory + "/current/" + fname, "w") as w:
-		w.write("File Processed: " + unpack_file + "\n")
-		w.write("Time Processed: " + process_time + "\n\n")
-		w.write("----------------------\nSource Data\n----------------------\n\n")
-		w.write("Name: " + feed_details["name"] + "\n")
-		w.write("Vip ID: " + str(feed_details["vip_id"]) + "\n")
-		w.write("Datetime: " + str(feed_details["datetime"]) + "\n\n")
-		w.write("----------------------\nElection Data\n----------------------\n\n")
-		w.write("Election ID: " + feed_details["election_id"] + "\n")
-		w.write("Election Date: " + str(feed_details["election_date"]) + "\n")
-		w.write("Election Type: " + str(feed_details["election_type"]) + "\n\n")
-		w.write("----------------------\nFile Report\n----------------------\n\n")
-		if len(invalid_sections) > 0:
-			w.write("Invalid Sections: " + str(invalid_sections) + "\n")
-		if len(invalid_files) > 0:
-			w.write("Invalid Files: " + str(invalid_files) + "\n")
-		if len(valid_files) > 0:
-			w.write("Valid Files: " + str(valid_files) + "\n")
-		w.write("Multiple xml files provided, could not process feed")
-	copyfile(directory + "/current/" + fname, directory + "/archives" + fname)
-	print feed_details
-		
 def process_files(feed_dir, archive_dir, vip_id, election_id):
 	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
 	cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
