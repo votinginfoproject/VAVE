@@ -24,8 +24,6 @@ REQUIRED_FILES = ["source.txt", "election.txt"]
 process_time = str(datetime.now())
 file_time_stamp = process_time[:process_time.rfind(".")].replace(":","-").replace(" ","_")
 
-#TODO:Place reporting code into a module
-
 def main():
 	
 	dt.create_or_clear("temp/")
@@ -53,43 +51,43 @@ def main():
 
 	feed_details.update(id_vals(DIRECTORIES["temp"]))
 
+	er.feed_summary(feed_details, valid_files, invalid_files, invalid_sections)
 	if "vip_id" not in feed_details or "election_id" not in feed_details:
-		er.feed_summary(feed_details, valid_files, invalid_files, invalid_sections)
 		return
 
-def process_files(feed_dir, archive_dir, vip_id, election_id):
-	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
-	cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
+	element_counts = update_data(feed_details, DIRECTORIES["temp"], DIRECTORIES["archives"])	
 
-	file_list = os.listdir(self.directory)
-	new_files = []
-	for f in file_list:
-		cursor.execute("SELECT hash FROM file_data WHERE file_name = '" + f + "' AND vip_id = " + str(vip_id) + " AND election_id = " + str(election_id))
+	er.more_summary(feed_details, element_counts)
+
+def update_data(feed_details, directory, archives):
+
+	file_data = convert_to_db_files(feed_details, directory)
+
+	meta_conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
+	meta_cursor = meta_conn.cursor(cursor_factory=extras.RealDictCursor)
+	vip_conn = psycopg2.connect(host="localhost", database="vip", user="username", password="password")
+	vip_cursor = vip_conn.cursor()
+	COPY_SQL_STATEMENT = "COPY {0}({1}) FROM '{2}' WITH CSV HEADER"
+
+	for f in file_data:
+
+		meta_cursor.execute("SELECT hash FROM file_data WHERE file_name = '" + f + "' AND vip_id = " + str(feed_details["vip_id"]) + " AND election_id = " + str(feed_details["election_id"]))
 		hash_val = cursor.fetchone()
-		new_hash = file_hash(feed_dir + f)
-		if not hash_val:
-			cursor.execute("INSERT INTO file_data (vip_id, election_id, file_name, hash) VALUES (" + str(vip_id) + "," + str(election_id) + ",'" + f + "','" + new_hash + "')")
-			new_files.append(f)
-		if new_hash != hash_val:
-			cursor.execute("UPDATE file_data SET hash = " + new_hash + " WHERE vip_id = " + str(vip_id) + " and election_id = " + str(election_id))
-			new_files.append(f)
+		new_hash = file_hash(directory + f)
+		if not hash_val or new_hash != hash_val:
+			r = csv.DictReader(open(directory+f, "r"))
+			copy_statement = COPY_SQL_STATEMENT.format(f.split(".")[0].lower(), ",".join(r.fieldnames), "/"+f)
+			print copy_statement
+			vip_cursor.copy_expert(copy_statement, sys.stdin)
+			vip_conn.commit()
+			if not hash_val:
+				meta_cursor.execute("INSERT INTO file_data (vip_id, election_id, file_name, hash) VALUES (" + str(feed_details["vip_id"]) + "," + str(feed_details["election_id"]) + ",'" + f + "','" + new_hash + "')")
+			elif new_hash != hash_val:
+			meta_cursor.execute("UPDATE file_data SET hash = " + new_hash + " WHERE vip_id = " + str(feed_details["vip_id"]) + " and election_id = " + str(feed_details["election_id"]))
+			os.rename(directory + f, archives + f.split(".")[0] + "_" + file_time_stamp + ".txt")
 
-	archive_files(feed_dir, archive_dir, new_files)
-	
-	convert_files(directory, new_files, vip_id, election_id)
-
-	update_db(directory, new_files)
-
-def convert_files(directory, new_files, vip_id, election_id):
-	
-	for f in new_files:
-		filename, extension = f.split(".")
-
-def archive_files(feed_dir, archive_dir, file_list):
-	cur_date = date.today().isoformat()
-	for f in file_list:
-		element_name, extension = f.lower().split(".")
-		copyfile(feed_dir + f, archive_dir + element_name + "_" + str(cur_date) + ".txt")
+def convert_to_db_files(feed_details, directory):
+	print feed_details
 
 def file_hash(fname):
 	with open(fname, "rb") as fh:
@@ -98,22 +96,11 @@ def file_hash(fname):
 			m.update(data)
 	return m.hexdigest()
 
-def update_db(directory, files):
-	vip_conn = psycopg2.connect(host="localhost", database="vip", user="username", password="password")
-	vip_cursor = vip_conn.cursor()
-	SQL_STATEMENT = "COPY {0}({1}) FROM '{2}' WITH CSV HEADER"
-
-	for f in files:
-		r = csv.DictReader(open(directory+f, "r"))
-		copy_statement = SQL_STATEMENT.format(f.split(".")[0].lower(), ",".join(r.fieldnames), "/"+f)
-		print copy_statement
-		vip_cursor.copy_expert(copy_statement, sys.stdin)
-		vip_conn.commit()
-
 def get_feed_details(directory):
 
 	feed_details = {}
 	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
+
 	cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
 	
 	try:
