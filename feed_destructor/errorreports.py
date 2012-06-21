@@ -13,6 +13,7 @@ def report_summary(feed_details, valid_files, invalid_files, invalid_sections):
 		with open(fname, "w") as w:
 			summary_header(feed_details, w)
 			file_summary(valid_files, invalid_files, invalid_sections, w)
+			w.write("Missing source information, could not process feed")
 	else:
 		directory = REPORT_DIRECTORY + str(feed_details["vip_id"]) + "/"
 		dt.create_directory(directory)
@@ -22,6 +23,7 @@ def report_summary(feed_details, valid_files, invalid_files, invalid_sections):
 			if "election_id" not in feed_details:
 				summary_header(feed_details, w)
 				file_summary(valid_files, invalid_files, invalid_sections, w)
+				w.write("Missing election information, could not process feed")
 			else:
 				summary_header(feed_details, w)
 				election_summary(feed_details, w)
