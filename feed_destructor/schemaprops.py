@@ -26,9 +26,9 @@ class SchemaProps:
 		self.create_headers()
 
 	def address_fields(self, e_name, e_type):
-		e_list = []
-		for e in self.schema.get_element_list("complexType", e_type):
-			e_list.append(e_name + "_" + e)
+		e_list = {}
+		for e in self.schema.get_sub_schema(e_type)["elements"]:
+			e_list[e_name + "_" + e["name"]] = e["type"]
 		return e_list
 
 	def create_headers(self):
@@ -36,12 +36,16 @@ class SchemaProps:
 		self.element_header = {}
 		self.db_header = {}
 		self.conversion_data = {}
+		self.db_types = {}
+		self.element_types = {}
 		
 		for elem_name in self.element_list:
 
 			subschema = self.schema.get_sub_schema(elem_name)
 			elem_list = []
 			db_list = []
+			db_type = {}
+			element_type = {}
 			conversion_list = {elem_name:{}}
 
 			if "elements" in subschema:
@@ -49,36 +53,51 @@ class SchemaProps:
 					e_name = e["name"]
 					if e["type"].endswith("AddressType"):
 						temp_list = self.address_fields(e_name, e["type"])
-						elem_list.extend(temp_list)
-						db_list.extend(temp_list)
-						for t in temp_list:
+						elem_list.extend(temp_list.keys())
+						element_type.update(temp_list)
+						db_list.extend(temp_list.keys())
+						db_type.update(temp_list)
+						for t in temp_list.keys():
 							conversion_list[elem_name][t] = t
 					elif "simpleContent" in e:
 						elem_list.append(e_name)
+						element_type[e_name] = e["type"]
 						sc_name = elem_name + "_" + e_name[:e_name.find("_id")]
 						conversion_list[sc_name] = {"id":elem_name + "_id", e_name:e_name}
 						temp_list = [elem_name + "_id", e_name]				 
+						temp_dict = {elem_name + "_id":"xs:integer", e_name:e["type"]}
 						for sc_attr in e["simpleContent"]["attributes"]:
 							elem_list.append(e_name + "_" + sc_attr["name"])
+							element_type[e_name + "_" + sc_attr["name"]] = sc_attr["type"]
 							temp_list.append(sc_attr["name"])
+							temp_dict[sc_attr["name"]] = sc_attr["type"]
 							conversion_list[sc_name][e_name + "_" + sc_attr["name"]] = sc_attr["name"]
 						self.db_header[sc_name] = temp_list
+						self.db_types[sc_name] = temp_dict
 					elif "maxOccurs" in e and e["maxOccurs"] == "unbounded":
 						elem_list.append(e_name)
+						element_type[e_name] = e["type"]
 						unbounded_name = elem_name + "_" + e_name[:e_name.find("_id")]
 						self.db_header[unbounded_name] = [elem_name + "_id", e_name]
+						self.db_types[unbounded_name] = {elem_name + "_id":"xs:integer", e_name:e["type"]}
 						conversion_list[unbounded_name] = {"id":elem_name + "_id", e_name:e_name}
 					else:
 						elem_list.append(e_name)
+						element_type[e_name] = e["type"]
 						db_list.append(e_name)
+						db_type[e_name] = e["type"]
 						conversion_list[elem_name][e_name] = e_name
 			if "attributes" in subschema:
 				for a in subschema["attributes"]:
 					elem_list.append(a["name"])
+					element_type[a["name"]] = a["type"]
 					db_list.append(a["name"])
+					db_type[a["name"]] = a["type"]
 					conversion_list[elem_name][a["name"]] = a["name"]
 			self.element_header[elem_name] = elem_list
+			self.element_types[elem_name] = element_type
 			self.db_header[elem_name] = db_list
+			self.db_types[elem_name] = db_type
 			self.conversion_data[elem_name] = conversion_list
 	
 	def header(self, file_format, element):
@@ -92,6 +111,18 @@ class SchemaProps:
 			return self.db_header
 		elif file_format == "element":
 			return self.element_header
+
+	def type_data(self, file_format, element):
+		if file_format == "db":
+			return self.db_types[element]
+		elif file_format == "element":
+			return self.element_types[element]
+
+	def full_type_data(self, file_format):
+		if file_format == "db":
+			return self.db_types
+		elif file_format == "element":
+			return self.element_types
 
 	def key_list(self, file_format):
 		if file_format == "db":
@@ -113,3 +144,8 @@ if __name__ == "__main__":
 	print sp.header("db", "precinct")
 	print sp.header("element", "precinct")
 	print sp.get_conversion_data()
+	print sp.type_data("db", "election")
+	print sp.type_data("element", "precinct")
+	print sp.full_type_data("db")
+	print sp.full_type_data("element")
+	
