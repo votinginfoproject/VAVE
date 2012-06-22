@@ -55,13 +55,13 @@ def main():
 	if "vip_id" not in feed_details or "election_id" not in feed_details:
 		return
 
+	file_data = convert_to_db_files(feed_details, directory, sp)
+
 	element_counts = update_data(feed_details, DIRECTORIES["temp"], DIRECTORIES["archives"])	
 
 	er.more_summary(feed_details, element_counts)
 
-def update_data(feed_details, directory, archives):
-
-	file_data = convert_to_db_files(feed_details, directory)
+def update_data(feed_details, file_data, directory, archives):
 
 	meta_conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
 	meta_cursor = meta_conn.cursor(cursor_factory=extras.RealDictCursor)
@@ -83,10 +83,46 @@ def update_data(feed_details, directory, archives):
 			if not hash_val:
 				meta_cursor.execute("INSERT INTO file_data (vip_id, election_id, file_name, hash) VALUES (" + str(feed_details["vip_id"]) + "," + str(feed_details["election_id"]) + ",'" + f + "','" + new_hash + "')")
 			elif new_hash != hash_val:
-			meta_cursor.execute("UPDATE file_data SET hash = " + new_hash + " WHERE vip_id = " + str(feed_details["vip_id"]) + " and election_id = " + str(feed_details["election_id"]))
+				meta_cursor.execute("UPDATE file_data SET hash = " + new_hash + " WHERE vip_id = " + str(feed_details["vip_id"]) + " and election_id = " + str(feed_details["election_id"]))
 			os.rename(directory + f, archives + f.split(".")[0] + "_" + file_time_stamp + ".txt")
 
-def convert_to_db_files(feed_details, directory):
+def convert_to_db_files(feed_details, directory, sp):
+	for f in os.listdir(directory):
+		element_name, extension = f.lower().split(".")
+		with open(directory + f, "r") as reader:
+			read_data = csv.DicReader(f)
+			with open(directory + element_name + "_db.txt", "w") as writer:
+				dict_fields = sp.header("db", element_name)
+				type_vals = sp.type_data("db", element_name)
+				if "id" in dict_fields:
+					dict_fields.pop(dict_fields.index("id"))
+				dict_fields.append("feed_id")
+				if not "vip_id" in dict_fields:
+					dict_fields.append("vip_id")
+				if not "election_id" in dict_fields:
+					dict_fields.append("election_id")
+				out = csv.DictWriter(writer, fieldnames=dict_fields)
+				out.writeheader()
+				for row in read_data:
+					for k in read_data.keys():
+						if type_vals[k] == "xs:integer":
+							try:
+								int(read_data[k])
+							except:
+								print read_data[k]
+								#write to error report file
+						elif type_vals[k] == "xs:string":#this will check for invalid characters
+							if read_data[k].find("<") >= 0:
+								print read_data[k] 
+						#TODO:add in date/datetime checks, and simpleContent checks
+						#TODO:add element counter
+					if "id" in read_data:
+						read_data["feed_id"] = read_data.pop("id")
+					read_data["vip_id"] = feed_details["vip_id"]
+					read_data["election_id"] = feed_details["election_id"]
+					out.writerow(read_data)
+		os.remove(directory + f)
+		os.rename(directory + element_name + "_db.txt", directory + f)
 	print feed_details
 
 def file_hash(fname):
@@ -100,7 +136,6 @@ def get_feed_details(directory):
 
 	feed_details = {}
 	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
-
 	cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
 	
 	try:
