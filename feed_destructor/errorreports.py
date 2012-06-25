@@ -2,7 +2,7 @@ import directorytools as dt
 from shutil import copyfile
 from csv import DictWriter
 
-REPORT_DIRECTORY = "reports/"
+REPORT_DIRECTORY = "/tmp/reports/"
 
 def report_summary(feed_details, valid_files, invalid_files, invalid_sections):
 	dt.create_directory(REPORT_DIRECTORY)
