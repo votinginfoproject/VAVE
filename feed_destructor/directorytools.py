@@ -38,7 +38,7 @@ def find_files(regex, directory=default_dir):
             continue
         for name in dirfiles:
             if regex.match(name) and not name.startswith("."):
-                file_list.append(root + "/" + name)
+                file_list.append(root + name)
     if len(file_list) > 0:
         return file_list
 
