@@ -1,5 +1,6 @@
 import directorytools as dt
 from shutil import copyfile
+from csv import DictWriter
 
 REPORT_DIRECTORY = "reports/"
 
@@ -19,7 +20,7 @@ def report_summary(feed_details, valid_files, invalid_files, invalid_sections):
 		dt.create_directory(directory)
 		dt.create_directory(directory + "archives/")
 		dt.clear_or_create(directory + "current/")
-		with open(fname, "w") as w:
+		with open(directory + "current/" + fname, "w") as w:
 			if "election_id" not in feed_details:
 				summary_header(feed_details, w)
 				file_summary(valid_files, invalid_files, invalid_sections, w)
@@ -52,6 +53,17 @@ def source_summary(feed_details, writer):
 
 def election_summary(feed_details, writer):
 	writer.write("----------------------\nElection Data\n----------------------\n\n")
-	writer.write("Election ID: " + feed_details["election_id"] + "\n")
+	writer.write("Election ID: " + str(feed_details["election_id"]) + "\n")
 	writer.write("Election Date: " + str(feed_details["election_date"]) + "\n")
 	writer.write("Election Type: " + str(feed_details["election_type"]) + "\n\n")
+
+def feed_errors(feed_details, error_data):
+	fname = "feed_errors_" + feed_details["file_time_stamp"] + ".txt"
+	cur_dir = REPORT_DIRECTORY + str(feed_details["vip_id"]) + "/current/"
+	arc_dir = REPORT_DIRECTORY + str(feed_details["vip_id"]) + "/archives/"
+	with open(cur_dir + fname, "a") as writer:
+		out = DictWriter(writer, fieldnames=['element_name','id','error_details'])
+		for row in error_data:
+			out.writerow(row)
+	copyfile(cur_dir + fname, arc_dir + fname)
+
