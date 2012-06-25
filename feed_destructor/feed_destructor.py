@@ -14,25 +14,34 @@ from psycopg2 import extras
 from shutil import copyfile
 import hashlib
 from datetime import datetime
+from time import strptime
 
 DIRECTORIES = {"temp":"temp/", "archives":"archives/"}
 SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
 CONFIG_FILE = "vip.cfg"
-unpack_file = "test.tar.gz"
+unpack_file = "test.zip"
 DEFAULT_ELECTION_ID = 1000
 REQUIRED_FILES = ["source.txt", "election.txt"]
 process_time = str(datetime.now())
 file_time_stamp = process_time[:process_time.rfind(".")].replace(":","-").replace(" ","_")
 
 def main():
+
+	print "setting up directories..."
 	
-	dt.create_or_clear("temp/")
+	dt.clear_or_create("temp/")
 	dt.create_directory("archives/")
+	
+	print "done setting up directories"
 
 	ftype = ft.get_type(unpack_file)
 
+	print "unpacking and flattening files..."
+
 	unpack.unpack(unpack_file, DIRECTORIES["temp"])
 	unpack.flatten_folder(DIRECTORIES["temp"])
+
+	print "done unpacking and flattening"
 
 	sp = SchemaProps()
 	feed_details = {"file":unpack_file, "process_time":process_time, "file_time_stamp":file_time_stamp}
@@ -40,24 +49,37 @@ def main():
 	invalid_files = []
 	valid_files = []
 
+	print "converting to db style flat files...."
+
 	if dt.file_by_name(CONFIG_FILE, DIRECTORIES["temp"]):
 		invalid_sections = process_config(DIRECTORIES["temp"], DIRECTORIES["temp"] + CONFIG_FILE, sp)
 	if dt.files_by_extension(".txt", DIRECTORIES["temp"]) > 0:
 		invalid_files, valid_files = process_flatfiles(DIRECTORIES["temp"], sp)
+	print "processing xml files..."
 	xml_files = dt.files_by_extension(".xml", DIRECTORIES["temp"])
+	print xml_files
 	if len(xml_files) >= 1:
-		ftff.feed_to_db_files(DIRECTORIES["temp"], DIRECTORIES["temp"] + xml_files[0], sp.full_header_data("db"), sp.version)
-		os.remove(DIRECTORIES["temp"] + xml_files[0])
+		ftff.feed_to_db_files(DIRECTORIES["temp"], xml_files[0], sp.full_header_data("db"), sp.version)
+		os.remove(xml_files[0])
 
-	feed_details.update(id_vals(DIRECTORIES["temp"]))
+	print "done processing xml files"
 
-	er.feed_summary(feed_details, valid_files, invalid_files, invalid_sections)
+	print "getting feed details..."
+	feed_details.update(get_feed_details(DIRECTORIES["temp"]))
+	print "done getting feed details"
+
+	print "writing initial report..."
+	er.report_summary(feed_details, valid_files, invalid_files, invalid_sections)
 	if "vip_id" not in feed_details or "election_id" not in feed_details:
 		return
+	print "done writing initial report"
 
-	file_data = convert_to_db_files(feed_details, directory, sp)
+	print "converting to full db files...."
+	element_counts = convert_to_db_files(feed_details, DIRECTORIES["temp"], sp)
+	print element_counts
+	print "done converting to full db files"
 
-	element_counts = update_data(feed_details, DIRECTORIES["temp"], DIRECTORIES["archives"])	
+#	update_data(feed_details, element_counts, DIRECTORIES["temp"], DIRECTORIES["archives"])	
 
 	er.more_summary(feed_details, element_counts)
 
@@ -87,10 +109,14 @@ def update_data(feed_details, file_data, directory, archives):
 			os.rename(directory + f, archives + f.split(".")[0] + "_" + file_time_stamp + ".txt")
 
 def convert_to_db_files(feed_details, directory, sp):
+	
+	error_data = []
+	element_counts = {}
 	for f in os.listdir(directory):
 		element_name, extension = f.lower().split(".")
 		with open(directory + f, "r") as reader:
-			read_data = csv.DicReader(f)
+			print "reading " + directory + f
+			read_data = csv.DictReader(reader)
 			with open(directory + element_name + "_db.txt", "w") as writer:
 				dict_fields = sp.header("db", element_name)
 				type_vals = sp.type_data("db", element_name)
@@ -103,27 +129,53 @@ def convert_to_db_files(feed_details, directory, sp):
 					dict_fields.append("election_id")
 				out = csv.DictWriter(writer, fieldnames=dict_fields)
 				out.writeheader()
+				row_count = 0
+				error_count = 0
 				for row in read_data:
-					for k in read_data.keys():
-						if type_vals[k] == "xs:integer":
+					row_error = False
+					row_count += 1
+					for k in row:
+						if len(row[k]) <= 0:
+							continue
+						elif type_vals[k] == "xs:integer":
 							try:
-								int(read_data[k])
+								int(row[k])
 							except:
-								print read_data[k]
-								#write to error report file
+								if "id" in row:
+									error_data.append({'element_name':element_name,'id':row["id"],'error_details':'Invalid integer given for '+k+':"'+row[k]+'"'})
+								row_error = True
 						elif type_vals[k] == "xs:string":#this will check for invalid characters
-							if read_data[k].find("<") >= 0:
-								print read_data[k] 
-						#TODO:add in date/datetime checks, and simpleContent checks
-						#TODO:add element counter
-					if "id" in read_data:
-						read_data["feed_id"] = read_data.pop("id")
-					read_data["vip_id"] = feed_details["vip_id"]
-					read_data["election_id"] = feed_details["election_id"]
-					out.writerow(read_data)
+							if row[k].find("<") >= 0 and "id" in row:
+								error_data.append({'element_name':element_name,'id':row["id"],'error_details':'Invalid character in string for '+k+':"'+row[k]+'"'})
+								row_error = True
+						elif type_vals[k] == "xs:date":
+							try:
+								strptime(row[k],"%Y-%m-%d")
+							except:
+								if "id" in row:
+									error_data.append({'element_name':element_name,'id':row["id"],'error_details':'Invalid date format for '+k+':"'+row[k]+'"'})
+								row_error = True
+						elif type_vals[k] == "xs:dateTime":
+							try:
+								strptime(row[k],"%Y-%m-%dT%H:%M:%S")
+							except:
+								if "id" in row:
+									error_data.append({'element_name':element_name,'id':row["id"],'error_details':'Invalid date format for '+k+':"'+row[k]+'"'})
+								row_error = True
+					if row_error == True:
+						error_count += 1
+						continue
+					if "id" in row:
+						row["feed_id"] = row.pop("id")
+					row["vip_id"] = feed_details["vip_id"]
+					row["election_id"] = feed_details["election_id"]
+					out.writerow(row)
+				element_counts[element_name] = {'original':row_count,'processed':(row_count-error_count)}
 		os.remove(directory + f)
 		os.rename(directory + element_name + "_db.txt", directory + f)
-	print feed_details
+		print "finished conversion"
+	er.feed_errors(feed_details, error_data)
+	return element_counts
 
 def file_hash(fname):
 	with open(fname, "rb") as fh:
@@ -162,7 +214,7 @@ def get_feed_details(directory):
 			new_id = DEFAULT_ELECTION_ID
 		else:
 			new_id = int(last_id) + 1
-		cursor.execute("INSERT INTO elections (vip_id, election_date, election_type, election_id) VALUES (" + str(feed_details["vip_id"]) + "," + feed_details["election_date"] + "," + feed_details["election_type"] + "," + str(new_id) + ")")
+		cursor.execute("INSERT INTO elections (vip_id, election_date, election_type, election_id) VALUES ('" + str(feed_details["vip_id"]) + "','" + feed_details["election_date"] + "','" + feed_details["election_type"] + "','" + str(new_id) + "')")
 		conn.commit()
 		feed_details["election_id"] = new_id
 		return feed_details
