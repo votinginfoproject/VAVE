@@ -49,7 +49,7 @@ def get_parsed_args():
 
 	return parser.parse_args()
 
-queries = ["CREATE TABLE elections (id {id}, vip_id {int}, election_date {timestamp}, election_type {xml_string}, election_id {int})", "CREATE TABLE file_data (vip_id {int}, election_id {int}, file_name {xml_string}, hash {xml_string})", "CREATE TABLE feed_data (vip_id {int}, election_id {int}, element {xml_string}, originial_count {int}, final_count {int})"]
+queries = ["CREATE TABLE elections (id {id}, vip_id {int}, election_date {timestamp}, election_type {xml_string}, election_id {int})", "CREATE TABLE file_data (vip_id {int}, election_id {int}, file_name {xml_string}, hash {xml_string})", "CREATE TABLE feed_data (vip_id {int}, election_id {int}, element {xml_string}, original_count {int}, final_count {int})"]
 
 parameters = get_parsed_args()
 
