@@ -15,8 +15,9 @@ from shutil import copyfile
 import hashlib
 from datetime import datetime
 from time import strptime
+import sys
 
-DIRECTORIES = {"temp":"temp/", "archives":"archives/"}
+DIRECTORIES = {"temp":"/tmp/temp/", "archives":"/tmp/archives/"}
 SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
 CONFIG_FILE = "vip.cfg"
 unpack_file = "test.zip"
@@ -29,8 +30,8 @@ def main():
 
 	print "setting up directories..."
 	
-	dt.clear_or_create("temp/")
-	dt.create_directory("archives/")
+	dt.clear_or_create(DIRECTORIES["temp"])
+	dt.create_directory(DIRECTORIES["archives"])
 	
 	print "done setting up directories"
 
@@ -57,7 +58,6 @@ def main():
 		invalid_files, valid_files = process_flatfiles(DIRECTORIES["temp"], sp)
 	print "processing xml files..."
 	xml_files = dt.files_by_extension(".xml", DIRECTORIES["temp"])
-	print xml_files
 	if len(xml_files) >= 1:
 		ftff.feed_to_db_files(DIRECTORIES["temp"], xml_files[0], sp.full_header_data("db"), sp.version)
 		os.remove(xml_files[0])
@@ -76,14 +76,16 @@ def main():
 
 	print "converting to full db files...."
 	element_counts = convert_to_db_files(feed_details, DIRECTORIES["temp"], sp)
-	print element_counts
-	print "done converting to full db files"
 
-#	update_data(feed_details, element_counts, DIRECTORIES["temp"], DIRECTORIES["archives"])	
+#	print element_counts
+	print "done converting to full db files"
+#	print feed_details
+
+	update_data(feed_details, element_counts, DIRECTORIES["temp"], DIRECTORIES["archives"])	
 
 	er.more_summary(feed_details, element_counts)
 
-def update_data(feed_details, file_data, directory, archives):
+def update_data(feed_details, element_counts, directory, archives):
 
 	meta_conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
 	meta_cursor = meta_conn.cursor(cursor_factory=extras.RealDictCursor)
@@ -91,22 +93,27 @@ def update_data(feed_details, file_data, directory, archives):
 	vip_cursor = vip_conn.cursor()
 	COPY_SQL_STATEMENT = "COPY {0}({1}) FROM '{2}' WITH CSV HEADER"
 
-	for f in file_data:
-
+	for f in os.listdir(directory):
+		element_name, extension = f.lower().split(".")
 		meta_cursor.execute("SELECT hash FROM file_data WHERE file_name = '" + f + "' AND vip_id = " + str(feed_details["vip_id"]) + " AND election_id = " + str(feed_details["election_id"]))
-		hash_val = cursor.fetchone()
+		hash_val = meta_cursor.fetchone()
 		new_hash = file_hash(directory + f)
 		if not hash_val or new_hash != hash_val:
 			r = csv.DictReader(open(directory+f, "r"))
-			copy_statement = COPY_SQL_STATEMENT.format(f.split(".")[0].lower(), ",".join(r.fieldnames), "/"+f)
-			print copy_statement
+			copy_statement = COPY_SQL_STATEMENT.format(element_name, ",".join(r.fieldnames), "/tmp/temp/"+ f)
+			print "upload to database " + element_name + " data"
 			vip_cursor.copy_expert(copy_statement, sys.stdin)
 			vip_conn.commit()
 			if not hash_val:
 				meta_cursor.execute("INSERT INTO file_data (vip_id, election_id, file_name, hash) VALUES (" + str(feed_details["vip_id"]) + "," + str(feed_details["election_id"]) + ",'" + f + "','" + new_hash + "')")
-			elif new_hash != hash_val:
+				meta_conn.commit()
+				meta_cursor.execute("INSERT INTO feed_data (vip_id, election_id, element, original_count, final_count) VALUES ('" + str(feed_details["vip_id"]) + "','" + str(feed_details["election_id"]) + "','" + element_name + "','" + str(element_counts[element_name]["original"]) + "','" + str(element_counts[element_name]["processed"]) + "')")
+			else:
 				meta_cursor.execute("UPDATE file_data SET hash = " + new_hash + " WHERE vip_id = " + str(feed_details["vip_id"]) + " and election_id = " + str(feed_details["election_id"]))
-			os.rename(directory + f, archives + f.split(".")[0] + "_" + file_time_stamp + ".txt")
+				meta_conn.commit()
+				meta_cursor.execute("UPDATE feed_data SET original_count = '" + str(element_counts[element_name]["original"]) + "' AND final_count = '" + str(element_counts[element_name]['processed']) + "' WHERE vip_id = " + str(feed_details["vip_id"]) + " AND election_id = " + str(feed_details["election_id"]) + " AND element LIKE '" + element_name + "'")
+			meta_conn.commit()
+			os.rename(directory + f, archives + element_name + "_" + file_time_stamp + ".txt")
 
 def convert_to_db_files(feed_details, directory, sp):
 	
@@ -122,7 +129,7 @@ def convert_to_db_files(feed_details, directory, sp):
 				type_vals = sp.type_data("db", element_name)
 				if "id" in dict_fields:
 					dict_fields.pop(dict_fields.index("id"))
-				dict_fields.append("feed_id")
+					dict_fields.append("feed_id")
 				if not "vip_id" in dict_fields:
 					dict_fields.append("vip_id")
 				if not "election_id" in dict_fields:
