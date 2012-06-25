@@ -17,9 +17,9 @@ def unpack(file_name, extract_path=None):
 		unpack_dir(file_name)
 	elif not extract_path and is_file:
 		unpack_file(file_name)
-	elif file_dir_name == extract_path and is_dir:
+	elif dirname == extract_path and is_dir:
 		unpack_dir(file_name)
-	elif file_dir_name == extract_path and is_file:
+	elif dirname == extract_path and is_file:
 		unpack_file(file_name)
 	else:
 		if not os.path.exists(extract_path):
