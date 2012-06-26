@@ -54,7 +54,7 @@ def source_summary(feed_details, writer):
 def election_summary(feed_details, writer):
 	writer.write("----------------------\nElection Data\n----------------------\n\n")
 	writer.write("Election ID: " + str(feed_details["election_id"]) + "\n")
-	writer.write("Election Date: " + str(feed_details["election_date"]) + "\n")
+	writer.write("Election Date: " + str(feed_details["date"]) + "\n")
 	writer.write("Election Type: " + str(feed_details["election_type"]) + "\n\n")
 
 def feed_errors(feed_details, error_data):
