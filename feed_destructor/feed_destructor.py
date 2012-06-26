@@ -80,9 +80,9 @@ def main():
 	print "converting to full db files...."
 	element_counts = convert_to_db_files(feed_details, DIRECTORIES["temp"], sp)
 
-	print element_counts
+#	print element_counts
 	print "done converting to full db files"
-	print feed_details
+#	print feed_details
 
 	update_data(feed_details, element_counts, DIRECTORIES["temp"], DIRECTORIES["archives"])	
 
@@ -101,8 +101,6 @@ def update_data(feed_details, element_counts, directory, archives):
 		meta_cursor.execute("SELECT hash FROM file_data WHERE file_name = '" + f + "' AND vip_id = " + str(feed_details["vip_id"]) + " AND election_id = " + str(feed_details["election_id"]))
 		hash_val = meta_cursor.fetchone()["hash"]
 		new_hash = file_hash(directory + f)
-		print "old hash: " + hash_val
-		print "new hash: " + new_hash
 		if not hash_val or new_hash != hash_val:
 			r = csv.DictReader(open(directory+f, "r"))
 			copy_statement = COPY_SQL_STATEMENT.format(element_name, ",".join(r.fieldnames), "/tmp/temp/"+ f)
@@ -142,52 +140,56 @@ def convert_to_db_files(feed_details, directory, sp):
 				out = csv.DictWriter(writer, fieldnames=dict_fields)
 				out.writeheader()
 				row_count = 0
-				error_count = 0
+				processed_count = 0
 				for row in read_data:
 					row_error = False
 					row_count += 1
 					for k in row:
-						if len(row[k]) <= 0:
-							continue
-						elif type_vals[k] == "xs:integer":
-							try:
-								int(row[k])
-							except:
-								if "id" in row:
-									error_data.append({'element_name':element_name,'id':row["id"],'error_details':'Invalid integer given for '+k+':"'+row[k]+'"'})
-								row_error = True
-						elif type_vals[k] == "xs:string":#this will check for invalid characters
-							if row[k].find("<") >= 0 and "id" in row:
-								error_data.append({'element_name':element_name,'id':row["id"],'error_details':'Invalid character in string for '+k+':"'+row[k]+'"'})
-								row_error = True
-						elif type_vals[k] == "xs:date":
-							try:
-								strptime(row[k],"%Y-%m-%d")
-							except:
-								if "id" in row:
-									error_data.append({'element_name':element_name,'id':row["id"],'error_details':'Invalid date format for '+k+':"'+row[k]+'"'})
-								row_error = True
-						elif type_vals[k] == "xs:dateTime":
-							try:
-								strptime(row[k],"%Y-%m-%dT%H:%M:%S")
-							except:
-								if "id" in row:
-									error_data.append({'element_name':element_name,'id':row["id"],'error_details':'Invalid date format for '+k+':"'+row[k]+'"'})
-								row_error = True
-					if row_error == True:
-						error_count += 1
+						error = validate(element_name, k, type_vals[k], row)
+					if error:
+						error_data.append(error)
 						continue
 					if "id" in row:
 						row["feed_id"] = row.pop("id")
 					row["vip_id"] = feed_details["vip_id"]
 					row["election_id"] = feed_details["election_id"]
 					out.writerow(row)
-				element_counts[element_name] = {'original':row_count,'processed':(row_count-error_count)}
+					processed_count += 1
+				element_counts[element_name] = {'original':row_count,'processed':processed_count}
 		os.remove(directory + f)
 		os.rename(directory + element_name + "_db.txt", directory + f)
 		print "finished conversion"
 	er.feed_errors(feed_details, error_data)
 	return element_counts
+
+def validate(e_name, key, xml_type, row):
+	if len(row[key]) <= 0:
+		return
+	elif xml_type == "xs:integer":
+		try:
+			int(row[key])
+		except:
+			error_dict
+			if "id" in row:
+				return {'element_name':e_name,'id':row["id"],'error_details':'Invalid integer given for '+key+':"'+row[key]+'"'}
+			return {'element_name':e_name,'id':'xxx', 'error_details':'Invalid integer given for '+key+':"'+row[key]+'"'
+	elif type_vals[k] == "xs:string":#this will check for invalid characters
+		if row[k].find("<") >= 0 and "id" in row:
+			return {'element_name':element_name,'id':row["id"],'error_details':'Invalid character in string for '+k+':"'+row[k]+'"'}
+	elif type_vals[k] == "xs:date":
+		try:
+			strptime(row[k],"%Y-%m-%d")
+		except:
+			if "id" in row:
+				return {'element_name':element_name,'id':row["id"],'error_details':'Invalid date format for '+k+':"'+row[k]+'"'}
+			return {'element_name':element_name,'id':'xxx','error_details':'Invalid date format for '+k+':"'+row[k]+'"'}
+	elif type_vals[k] == "xs:dateTime":
+		try:
+			strptime(row[k],"%Y-%m-%dT%H:%M:%S")
+		except:
+			if "id" in row:
+				return {'element_name':element_name,'id':row["id"],'error_details':'Invalid date format for '+k+':"'+row[k]+'"'}
+			return {'element_name':element_name,'id':'xxx','error_details':'Invalid date format for '+k+':"'+row[k]+'"'}
 
 def file_hash(fname):
 	with open(fname, "rb") as fh:
@@ -226,11 +228,9 @@ def get_feed_details(directory):
 		cursor.execute("INSERT INTO elections (vip_id, election_date, election_type, election_id) VALUES ('" + str(feed_details["vip_id"]) + "','" + feed_details["date"] + "','" + feed_details["election_type"] + "','" + str(new_id) + "')")
 		conn.commit()
 		feed_details["election_id"] = new_id
-		return feed_details
 	else:
 		feed_details["election_id"] = election_data["election_id"]
-		return feed_details
-
+	return feed_details
 
 #add in header to all valid formatted files, delete invalid files
 def process_config(directory, config_file, schema_props):
@@ -270,7 +270,7 @@ def process_flatfiles(directory, schema_props):
 	file_list = {}
 	for f in os.listdir(directory):
 		element_name, extension = f.lower().split(".")
-		if extension == "txt" or extension == "csv":
+		if extension == "txt":
 			file_list[f] = element_name
 
 	if any(vals not in schema_props.key_list("element") for vals in file_list.values()):
