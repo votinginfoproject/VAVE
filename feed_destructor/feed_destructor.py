@@ -41,6 +41,9 @@ def main():
 
 	unpack.unpack(unpack_file, DIRECTORIES["temp"])
 	unpack.flatten_folder(DIRECTORIES["temp"])
+# I could have flatten_folder return a list of files in the directory, so that
+# we wouldn't have to search through the directory everytime for specific files
+# since os.walk is slow with directories with large files
 
 	print "done unpacking and flattening"
 
@@ -77,9 +80,9 @@ def main():
 	print "converting to full db files...."
 	element_counts = convert_to_db_files(feed_details, DIRECTORIES["temp"], sp)
 
-#	print element_counts
+	print element_counts
 	print "done converting to full db files"
-#	print feed_details
+	print feed_details
 
 	update_data(feed_details, element_counts, DIRECTORIES["temp"], DIRECTORIES["archives"])	
 
@@ -96,8 +99,10 @@ def update_data(feed_details, element_counts, directory, archives):
 	for f in os.listdir(directory):
 		element_name, extension = f.lower().split(".")
 		meta_cursor.execute("SELECT hash FROM file_data WHERE file_name = '" + f + "' AND vip_id = " + str(feed_details["vip_id"]) + " AND election_id = " + str(feed_details["election_id"]))
-		hash_val = meta_cursor.fetchone()
+		hash_val = meta_cursor.fetchone()["hash"]
 		new_hash = file_hash(directory + f)
+		print "old hash: " + hash_val
+		print "new hash: " + new_hash
 		if not hash_val or new_hash != hash_val:
 			r = csv.DictReader(open(directory+f, "r"))
 			copy_statement = COPY_SQL_STATEMENT.format(element_name, ",".join(r.fieldnames), "/tmp/temp/"+ f)
@@ -196,23 +201,20 @@ def get_feed_details(directory):
 	feed_details = {}
 	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
 	cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
+	details_dict = {'source.txt':['vip_id','name','datetime'],
+			'election.txt':['date','election_type']}
 	
 	try:
-		with open(directory + "source.txt", "r") as f:
-			fdata = csv.DictReader(f)
-			for row in fdata:
-				feed_details["vip_id"] = row["vip_id"]
-				feed_details["name"] = row["name"]
-				feed_details["datetime"] = row["datetime"]
-		with open(directory + "election.txt", "r") as f:
-			fdata = csv.DictReader(f)
-			for row in fdata:
-				feed_details["election_date"] = row["date"]
-				feed_details["election_type"] = row["election_type"]
+		for fname in details_dict:
+			with open(directory + fname, "r") as f:
+				reader = csv.DictReader(f)
+				row = reader.next()
+				for val in details_dict[dd]:
+					feed_details[val] = row[val] 
 	except:
 		return feed_details
 	
-	cursor.execute("SELECT * FROM elections WHERE vip_id = " + str(feed_details["vip_id"]) + " AND election_date = '" + feed_details["election_date"] + "' AND election_type = '" + feed_details["election_type"] + "'")
+	cursor.execute("SELECT * FROM elections WHERE vip_id = " + str(feed_details["vip_id"]) + " AND election_date = '" + feed_details["date"] + "' AND election_type = '" + feed_details["election_type"] + "'")
 	election_data = cursor.fetchone()
 	if not election_data:
 		cursor.execute("SELECT GREATEST(election_id) FROM elections")
@@ -221,7 +223,7 @@ def get_feed_details(directory):
 			new_id = DEFAULT_ELECTION_ID
 		else:
 			new_id = int(last_id) + 1
-		cursor.execute("INSERT INTO elections (vip_id, election_date, election_type, election_id) VALUES ('" + str(feed_details["vip_id"]) + "','" + feed_details["election_date"] + "','" + feed_details["election_type"] + "','" + str(new_id) + "')")
+		cursor.execute("INSERT INTO elections (vip_id, election_date, election_type, election_id) VALUES ('" + str(feed_details["vip_id"]) + "','" + feed_details["date"] + "','" + feed_details["election_type"] + "','" + str(new_id) + "')")
 		conn.commit()
 		feed_details["election_id"] = new_id
 		return feed_details
@@ -288,11 +290,12 @@ def process_flatfiles(directory, schema_props):
 #converts data from element format to db format. Currently opens and reads
 #through the whole file each time, splitting on each row was actually slower
 def convert_data(directory, fname, element, conversion_dict):
-	files_used = []
 	for conversion in conversion_dict:
-		if conversion == element:
-			continue
 		with open(directory + fname, "r") as f:
+			if conversion == element:
+				output = directory + element + "_temp.txt"
+			else:
+				output = directory + conversion + ".txt"
 			fdata = csv.DictReader(f)
 			header = fdata.fieldnames
 			output_list = []
@@ -302,34 +305,14 @@ def convert_data(directory, fname, element, conversion_dict):
 					header_list.append(conversion_dict[conversion][h])
 					output_list.append(h)
 			if len(output_list) > 1:
-				files_used.append(conversion + ".txt")
 				print "processing " + conversion
-				with open(directory + conversion + ".txt", "w") as w:
+				with open(output, "w") as w:
 					w.write(",".join(header_list) + "\n")
 					for row in fdata:
 						row_data = []
 						for o in output_list:
 							row_data.append(row[o])
 						w.write(",".join(row_data) + "\n")
-	element_conversion = conversion_dict[element]
-	print "processing " + element
-	files_used.append(element + ".txt")	
-	with open(directory + fname, "r") as f:
-		fdata = csv.DictReader(f)
-		header = fdata.fieldnames
-		output_list = []
-		header_list = []
-		for h in header:
-			if h in element_conversion:
-				header_list.append(element_conversion[h])
-				output_list.append(h)
-		with open(directory + element + "_temp.txt", "w") as w:
-			w.write(",".join(header_list) + "\n")
-			for row in fdata:
-				row_data = []
-				for o in output_list:
-					row_data.append(row[o])
-				w.write(",".join(row_data) + "\n")		
 	os.remove(directory + fname)
 	os.rename(directory + element + "_temp.txt", directory + fname)
 
