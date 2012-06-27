@@ -16,6 +16,7 @@ import hashlib
 from datetime import datetime
 from time import strptime
 import sys
+import re
 
 DIRECTORIES = {"temp":"/tmp/temp/", "archives":"/tmp/archives/"}
 SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
@@ -25,6 +26,14 @@ DEFAULT_ELECTION_ID = 1000
 REQUIRED_FILES = ["source.txt", "election.txt"]
 process_time = str(datetime.now())
 file_time_stamp = process_time[:process_time.rfind(".")].replace(":","-").replace(" ","_")
+LOCALITY_TYPES = ['county','city','town','township','borough','parish','village','region']
+ZIPCODE_REGEX = re.compile("\d{5}(?:[-\s]\d{4})?")
+EMAIL_REGEX = re.compile("[a-zA-Z0-9+_\-\.]+@[0-9a-zA-Z][.-0-9a-zA-Z]*.[a-zA-Z]")
+URL_REGEX = re.compile("http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))")
+PHONE_REGEX = re.compile("1?\s*\W?\s*([2-9][0-8][0-9])\s*\W?\s*([2-9][0-9]{2})\s*\W?\s*([0-9]{4})(\se?x?t?(\d*))?")
+VALID_DIRECTIONS = ['n','s','e','w','nw','ne','sw','se','north','south','east','west','northeast','northwest','southeast','southwest']
+
+#TODO:Add error check for duplicate id's
 
 def main():
 
@@ -145,8 +154,8 @@ def convert_to_db_files(feed_details, directory, sp):
 					row_error = False
 					row_count += 1
 					for k in row:
-						error = validate(element_name, k, type_vals[k], row)
-					if error:
+						error = validate(element_name, k, type_vals[k], row, False)
+					if "error_details" in error:
 						error_data.append(error)
 						continue
 					if "id" in row:
@@ -162,34 +171,63 @@ def convert_to_db_files(feed_details, directory, sp):
 	er.feed_errors(feed_details, error_data)
 	return element_counts
 
-def validate(e_name, key, xml_type, row):
-	if len(row[key]) <= 0:
-		return
+#need to add in changes for 'None', 'n/a', etc
+def validate(e_name, key, xml_type, row, is_required):
+
+	error_dict = {'base_element':e_name, 'error_element':key}
+	if "id" in row:
+		error_dict["id"] = row["id"]
+	else:
+		error_dict["id"] = 'xxx'
+
+	if len(row[key]) <= 0: 
+		if is_required:
+			error_dict["error_details"] = 'Missing required value' 
 	elif xml_type == "xs:integer":
 		try:
 			int(row[key])
+			if key == "end_apartment_number" and int(row[key]) == 0:
+				error_dict["error_details"] = 'Ending apartment number must be greater than zero:"'+row[key]+'"'
+			elif key == "end_house_number" and int(row[key]) == 0:
+				error_dict["error_details"] = 'Ending house number must be greater than zero:"'+row[key]+'"'
 		except:
-			error_dict
-			if "id" in row:
-				return {'element_name':e_name,'id':row["id"],'error_details':'Invalid integer given for '+key+':"'+row[key]+'"'}
-			return {'element_name':e_name,'id':'xxx', 'error_details':'Invalid integer given for '+key+':"'+row[key]+'"'
-	elif type_vals[k] == "xs:string":#this will check for invalid characters
-		if row[k].find("<") >= 0 and "id" in row:
-			return {'element_name':element_name,'id':row["id"],'error_details':'Invalid character in string for '+k+':"'+row[k]+'"'}
-	elif type_vals[k] == "xs:date":
+			error_dict["error_details"] = 'Invalid integer given:"'+row[key]+'"'
+	elif xml_type == "xs:string":
+		if row[key].find("<") >= 0: #need to add in other invalid character checks
+			error_dict["error_details"] = 'Invalid character in string:"'+row[key]+'"'
+		elif key == "zip" and not ZIPCODE_REGEX.match(row[key]):
+			error_dict["error_details"] = 'Invalid Zip:"'+row[key]+'"'
+		elif key == "email" and not EMAIL_REGEX.match(row[key]):
+			error_dict["error_details"] = 'Invalid Email:"'+row[key]+'"'
+		elif key.endswith("_url") and not URL_REGEX.match(row[key]):
+			error_dict["error_details"] = 'Invalid URL:"'+row[key]+'"'
+		elif key == "state" and len(row[key]) != 2:
+			error_dict["error_details"] = 'Invalid state abbreviation:"'+row[key]+'"'
+		elif key == "locality" and row[key].lower() not in LOCALITY_TYPES:
+			error_dict["error_details"] = 'Invalid type:"'+row[key]+'"'
+		elif (key == "phone" or key == "fax") and not PHONE_REGEX.match(row[key].lower()):
+			error_dict["error_details"] = 'Invalid phone:"'+row[key]+'"' 
+		elif key.endswith("_direction") and row[key].lower().replace(' ','') not in VALID_DIRECTIONS:
+			error_dict["error_details"] = 'Invalid direction:"'+row[key]+'"'
+		elif key.find("hours") >= 0 and (row[key].find("to") >= 0 or row[key].find("-") >= 0):#can be improved, just a naive check to make sure there is some hour range value
+			error_dict["error_details"] = 'No hour range provided:"'+row[key]+'"'
+	elif xml_type == "xs:date":
 		try:
-			strptime(row[k],"%Y-%m-%d")
+			strptime(row[key],"%Y-%m-%d")
 		except:
-			if "id" in row:
-				return {'element_name':element_name,'id':row["id"],'error_details':'Invalid date format for '+k+':"'+row[k]+'"'}
-			return {'element_name':element_name,'id':'xxx','error_details':'Invalid date format for '+k+':"'+row[k]+'"'}
-	elif type_vals[k] == "xs:dateTime":
+			error_dict["error_details"] = 'Invalid date format for '+key+':"'+row[key]+'"'
+	elif xml_type == "xs:dateTime":
 		try:
-			strptime(row[k],"%Y-%m-%dT%H:%M:%S")
+			strptime(row[key],"%Y-%m-%dT%H:%M:%S")
 		except:
-			if "id" in row:
-				return {'element_name':element_name,'id':row["id"],'error_details':'Invalid date format for '+k+':"'+row[k]+'"'}
-			return {'element_name':element_name,'id':'xxx','error_details':'Invalid date format for '+k+':"'+row[k]+'"'}
+			error_dict["error_details"] = 'Invalid date format for '+key+':"'+row[key]+'"'
+	elif xml_type == 'yesNoEnum':
+		if row[key].lower() not in ['yes','no']:
+			error_dict["error_details"] = 'Must be "yes" or "no"'
+	elif xml_type == 'oebEnum':
+		if row[key].lower() not in ['odd','even','both']:
+			error_dict["error_details"] = 'Must be "odd", "even", or "both"'
+	return error_dict
 
 def file_hash(fname):
 	with open(fname, "rb") as fh:
