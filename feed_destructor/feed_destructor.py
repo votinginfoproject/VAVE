@@ -34,6 +34,7 @@ PHONE_REGEX = re.compile("1?\s*\W?\s*([2-9][0-8][0-9])\s*\W?\s*([2-9][0-9]{2})\s
 VALID_DIRECTIONS = ['n','s','e','w','nw','ne','sw','se','north','south','east','west','northeast','northwest','southeast','southwest']
 
 #TODO:Add error check for duplicate id's
+#TODO:Based on element with error, add to warning list or error list
 
 def main():
 
@@ -129,6 +130,7 @@ def update_data(feed_details, element_counts, directory, archives):
 
 def convert_to_db_files(feed_details, directory, sp):
 	
+	feed_ids = []
 	error_data = []
 	element_counts = {}
 	for f in os.listdir(directory):
@@ -160,6 +162,13 @@ def convert_to_db_files(feed_details, directory, sp):
 						continue
 					if "id" in row:
 						row["feed_id"] = row.pop("id")
+						if element_name == "source":
+							row["feed_id"] = 1
+						if row["feed_id"] not in feed_ids:
+							feed_ids.append(row["feed_id"]
+						else:
+							#non-unique id's in feed, error report
+							continue
 					row["vip_id"] = feed_details["vip_id"]
 					row["election_id"] = feed_details["election_id"]
 					out.writerow(row)
