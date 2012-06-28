@@ -6,6 +6,8 @@ SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/
 VALID_VERSIONS = ["3.0", "2.3", "2.2", "2.1"]
 DEFAULT_VERSION = "3.0"
 
+#TODO:Lots of refactoring of properties objects
+
 class SchemaProps:
 
 	def __init__(self, schema_data=None):
@@ -25,10 +27,13 @@ class SchemaProps:
 
 		self.create_headers()
 
-	def address_fields(self, e_name, e_type):
+	def address_fields(self, e_name, e_type, required):
 		e_list = {}
 		for e in self.schema.get_sub_schema(e_type)["elements"]:
-			e_list[e_name + "_" + e["name"]] = e["type"]
+			if required and ("minOccurs" not in e or int(e["minOccurs"]) > 0):
+				e_list[e_name + "_" + e["name"]] = {"type":e["type"],"is_required":"true"}
+			else:
+				e_list[e_name + "_" + e["name"]] = {"type":e["type"],"is_required":"false"}
 		return e_list
 
 	def create_headers(self):
@@ -52,7 +57,11 @@ class SchemaProps:
 				for e in subschema["elements"]:
 					e_name = e["name"]
 					if e["type"].endswith("AddressType"):
-						temp_list = self.address_fields(e_name, e["type"])
+						if "minOccurs" not in e or int(e["minOccurs"]) > 0:
+							address_required = True
+						else:
+							address_required = False
+						temp_list = self.address_fields(e_name, e["type"], address_required)
 						elem_list.extend(temp_list.keys())
 						element_type.update(temp_list)
 						db_list.extend(temp_list.keys())
@@ -61,38 +70,46 @@ class SchemaProps:
 							conversion_list[elem_name][t] = t
 					elif "simpleContent" in e:
 						elem_list.append(e_name)
-						element_type[e_name] = e["type"]
+						element_type[e_name] = {"type":e["type"],"is_required":"false"}
 						sc_name = elem_name + "_" + e_name[:e_name.find("_id")]
 						conversion_list[sc_name] = {"id":elem_name + "_id", e_name:e_name}
 						temp_list = [elem_name + "_id", e_name]				 
-						temp_dict = {elem_name + "_id":"xs:integer", e_name:e["type"]}
+						temp_dict = {elem_name + "_id":{"type":"xs:integer","is_required":"true"}, e_name:{"type":e["type"],"is_required":"true"}}
 						for sc_attr in e["simpleContent"]["attributes"]:
 							elem_list.append(e_name + "_" + sc_attr["name"])
-							element_type[e_name + "_" + sc_attr["name"]] = sc_attr["type"]
+							element_type[e_name + "_" + sc_attr["name"]] = {"type":sc_attr["type"],"is_required":"false"}
 							temp_list.append(sc_attr["name"])
-							temp_dict[sc_attr["name"]] = sc_attr["type"]
+							temp_dict[sc_attr["name"]] = {"type":sc_attr["type"],"is_required":"false"}
 							conversion_list[sc_name][e_name + "_" + sc_attr["name"]] = sc_attr["name"]
 						self.db_header[sc_name] = temp_list
 						self.db_types[sc_name] = temp_dict
 					elif "maxOccurs" in e and e["maxOccurs"] == "unbounded":
 						elem_list.append(e_name)
-						element_type[e_name] = e["type"]
+						element_type[e_name] = {"type":e["type"],"is_required":"false"}
 						unbounded_name = elem_name + "_" + e_name[:e_name.find("_id")]
 						self.db_header[unbounded_name] = [elem_name + "_id", e_name]
-						self.db_types[unbounded_name] = {elem_name + "_id":"xs:integer", e_name:e["type"]}
+						self.db_types[unbounded_name] = {elem_name + "_id":{"type":"xs:integer","is_required":"true"}, e_name:{"type":e["type"],"is_required":"true"}}
 						conversion_list[unbounded_name] = {"id":elem_name + "_id", e_name:e_name}
 					else:
 						elem_list.append(e_name)
-						element_type[e_name] = e["type"]
 						db_list.append(e_name)
-						db_type[e_name] = e["type"]
+						if "minOccurs" not in e or int(e["minOccurs"]) > 0:
+							element_type[e_name] = {"type":e["type"],"is_required":"true"}
+							db_type[e_name] = {"type":e["type"],"is_required":"true"}
+						else:
+							element_type[e_name] = {"type":e["type"],"is_required":"false"}
+							db_type[e_name] = {"type":e["type"],"is_required":"false"}
 						conversion_list[elem_name][e_name] = e_name
 			if "attributes" in subschema:
 				for a in subschema["attributes"]:
 					elem_list.append(a["name"])
-					element_type[a["name"]] = a["type"]
 					db_list.append(a["name"])
-					db_type[a["name"]] = a["type"]
+					if "use" in a and a["use"] == "required":
+						element_type[a["name"]] = {"type":a["type"],"is_required":"true"}
+						db_type[a["name"]] = {"type":a["type"],"is_required":"true"}
+					else:
+						element_type[a["name"]] = {"type":a["type"],"is_required":"false"}
+						db_type[a["name"]] = {"type":a["type"],"is_required":"false"}
 					conversion_list[elem_name][a["name"]] = a["name"]
 			self.element_header[elem_name] = elem_list
 			self.element_types[elem_name] = element_type
