@@ -154,7 +154,7 @@ def convert_to_db_files(feed_details, directory, sp):
 					row_error = False
 					row_count += 1
 					for k in row:
-						error = validate(element_name, k, type_vals[k], row, False)
+						error = validate(element_name, k, type_vals[k]["type"], row, type_vals[k]["is_required"])
 					if "error_details" in error:
 						error_data.append(error)
 						continue
@@ -172,7 +172,7 @@ def convert_to_db_files(feed_details, directory, sp):
 	return element_counts
 
 #need to add in changes for 'None', 'n/a', etc
-def validate(e_name, key, xml_type, row, is_required):
+def validate(e_name, key, xml_type, row, required):
 
 	error_dict = {'base_element':e_name, 'error_element':key}
 	if "id" in row:
@@ -180,8 +180,8 @@ def validate(e_name, key, xml_type, row, is_required):
 	else:
 		error_dict["id"] = 'xxx'
 
-	if len(row[key]) <= 0: 
-		if is_required:
+	if len(row[key]) <= 0 or row[key].lower() in ["none","n/a","-","na"]: 
+		if required == "true":
 			error_dict["error_details"] = 'Missing required value' 
 	elif xml_type == "xs:integer":
 		try:
