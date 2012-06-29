@@ -73,6 +73,7 @@ def main():
 	if len(xml_files) >= 1:
 		ftff.feed_to_db_files(DIRECTORIES["temp"], xml_files[0], sp.full_header_data("db"), sp.version)
 		os.remove(xml_files[0])
+		valid_files.append(xml_files[0])
 
 	print "done processing xml files"
 
@@ -112,20 +113,29 @@ def update_data(feed_details, element_counts, directory, archives):
 		else:
 			hash_val = None
 		new_hash = file_hash(directory + f)
-		if not hash_val or new_hash != hash_val:
+		if not hash_val:
 			r = csv.DictReader(open(directory+f, "r"))
 			copy_statement = COPY_SQL_STATEMENT.format(element_name, ",".join(r.fieldnames), "/tmp/temp/"+ f)
 			print "upload to database " + element_name + " data"
 			vip_cursor.copy_expert(copy_statement, sys.stdin)
 			vip_conn.commit()
-			if not hash_val:
-				meta_cursor.execute("INSERT INTO file_data (vip_id, election_id, file_name, hash) VALUES (" + str(feed_details["vip_id"]) + "," + str(feed_details["election_id"]) + ",'" + f + "','" + new_hash + "')")
-				meta_conn.commit()
-				meta_cursor.execute("INSERT INTO feed_data (vip_id, election_id, element, original_count, final_count) VALUES ('" + str(feed_details["vip_id"]) + "','" + str(feed_details["election_id"]) + "','" + element_name + "','" + str(element_counts[element_name]["original"]) + "','" + str(element_counts[element_name]["processed"]) + "')")
-			else:
-				meta_cursor.execute("UPDATE file_data SET hash = " + new_hash + " WHERE vip_id = " + str(feed_details["vip_id"]) + " and election_id = " + str(feed_details["election_id"]))
-				meta_conn.commit()
-				meta_cursor.execute("UPDATE feed_data SET original_count = '" + str(element_counts[element_name]["original"]) + "' AND final_count = '" + str(element_counts[element_name]['processed']) + "' WHERE vip_id = " + str(feed_details["vip_id"]) + " AND election_id = " + str(feed_details["election_id"]) + " AND element LIKE '" + element_name + "'")
+			meta_cursor.execute("INSERT INTO file_data (vip_id, election_id, file_name, hash) VALUES (" + str(feed_details["vip_id"]) + "," + str(feed_details["election_id"]) + ",'" + f + "','" + new_hash + "')")
+			meta_conn.commit()
+			meta_cursor.execute("INSERT INTO feed_data (vip_id, election_id, element, original_count, final_count) VALUES ('" + str(feed_details["vip_id"]) + "','" + str(feed_details["election_id"]) + "','" + element_name + "','" + str(element_counts[element_name]["original"]) + "','" + str(element_counts[element_name]["processed"]) + "')")
+			meta_conn.commit()
+			os.rename(directory + f, archives + element_name + "_" + file_time_stamp + ".txt")
+		if new_hash != hash_val:
+			#TODO:Delete from, could be too many rows so I need to configure postgres to correctly partition
+			#the data based on vip/election id, and then just drop the partition, otherwise could write a query to
+			#join all valid data into a new table and rename
+			r = csv.DictReader(open(directory+f, "r"))
+			copy_statement = COPY_SQL_STATEMENT.format(element_name, ",".join(r.fieldnames), "/tmp/temp/"+ f)
+			print "upload to database " + element_name + " data"
+			vip_cursor.copy_expert(copy_statement, sys.stdin)
+			vip_conn.commit()
+			meta_cursor.execute("UPDATE file_data SET hash = " + new_hash + " WHERE vip_id = " + str(feed_details["vip_id"]) + " and election_id = " + str(feed_details["election_id"]))
+			meta_conn.commit()
+			meta_cursor.execute("UPDATE feed_data SET original_count = '" + str(element_counts[element_name]["original"]) + "' AND final_count = '" + str(element_counts[element_name]['processed']) + "' WHERE vip_id = " + str(feed_details["vip_id"]) + " AND election_id = " + str(feed_details["election_id"]) + " AND element LIKE '" + element_name + "'")
 			meta_conn.commit()
 			os.rename(directory + f, archives + element_name + "_" + file_time_stamp + ".txt")
 
@@ -158,12 +168,14 @@ def convert_to_db_files(feed_details, directory, sp):
 					row_count += 1
 					for k in row:
 						error = validate(element_name, k, type_vals[k]["type"], row, type_vals[k]["is_required"])
-					if "error_details" in error:
-						error_data.append(error) #need to parse out different between errors and warnings
+						if "error_details" in error:
+							error_data.append(error) #need to parse out different between errors and warnings
 					if "id" in row:
 						row["feed_id"] = row.pop("id")
 						if element_name == "source":
 							row["feed_id"] = 1
+						elif element_name == "election":
+							row["feed_id"] = feed_details["election_id"]
 						if row["feed_id"] not in feed_ids:
 							feed_ids[row["feed_id"]] = None
 						else:
@@ -180,7 +192,6 @@ def convert_to_db_files(feed_details, directory, sp):
 	er.feed_errors(feed_details, error_data)
 	return element_counts
 
-#need to add in changes for 'None', 'n/a', etc
 def validate(e_name, key, xml_type, row, required):
 
 	error_dict = {'base_element':e_name, 'error_element':key}
@@ -271,7 +282,7 @@ def get_feed_details(directory):
 		if not last_id:
 			new_id = DEFAULT_ELECTION_ID
 		else:
-			new_id = int(last_id) + 1
+			new_id = int(last_id["greatest"]) + 1
 		cursor.execute("INSERT INTO elections (vip_id, election_date, election_type, election_id) VALUES ('" + str(feed_details["vip_id"]) + "','" + feed_details["date"] + "','" + feed_details["election_type"] + "','" + str(new_id) + "')")
 		conn.commit()
 		feed_details["election_id"] = new_id
