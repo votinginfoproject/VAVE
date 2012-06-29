@@ -62,7 +62,8 @@ def feed_errors(feed_details, error_data):
 	cur_dir = REPORT_DIRECTORY + str(feed_details["vip_id"]) + "/current/"
 	arc_dir = REPORT_DIRECTORY + str(feed_details["vip_id"]) + "/archives/"
 	with open(cur_dir + fname, "a") as writer:
-		out = DictWriter(writer, fieldnames=['element_name','id','error_details'])
+		out = DictWriter(writer, fieldnames=['base_element','id','error_element','error_details'])
+		out.writeheader()
 		for row in error_data:
 			out.writerow(row)
 	copyfile(cur_dir + fname, arc_dir + fname)
