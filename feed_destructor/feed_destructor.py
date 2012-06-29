@@ -33,7 +33,6 @@ URL_REGEX = re.compile("http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-
 PHONE_REGEX = re.compile("1?\s*\W?\s*([2-9][0-8][0-9])\s*\W?\s*([2-9][0-9]{2})\s*\W?\s*([0-9]{4})(\se?x?t?(\d*))?")
 VALID_DIRECTIONS = ['n','s','e','w','nw','ne','sw','se','north','south','east','west','northeast','northwest','southeast','southwest']
 
-#TODO:Add error check for duplicate id's
 #TODO:Based on element with error, add to warning list or error list
 
 def main():
@@ -90,9 +89,7 @@ def main():
 	print "converting to full db files...."
 	element_counts = convert_to_db_files(feed_details, DIRECTORIES["temp"], sp)
 
-#	print element_counts
 	print "done converting to full db files"
-#	print feed_details
 
 	update_data(feed_details, element_counts, DIRECTORIES["temp"], DIRECTORIES["archives"])	
 
@@ -109,7 +106,11 @@ def update_data(feed_details, element_counts, directory, archives):
 	for f in os.listdir(directory):
 		element_name, extension = f.lower().split(".")
 		meta_cursor.execute("SELECT hash FROM file_data WHERE file_name = '" + f + "' AND vip_id = " + str(feed_details["vip_id"]) + " AND election_id = " + str(feed_details["election_id"]))
-		hash_val = meta_cursor.fetchone()["hash"]
+		result = meta_cursor.fetchone()
+		if result:
+			hash_val = result["hash"]
+		else:
+			hash_val = None
 		new_hash = file_hash(directory + f)
 		if not hash_val or new_hash != hash_val:
 			r = csv.DictReader(open(directory+f, "r"))
@@ -130,7 +131,7 @@ def update_data(feed_details, element_counts, directory, archives):
 
 def convert_to_db_files(feed_details, directory, sp):
 	
-	feed_ids = []
+	feed_ids = {}
 	error_data = []
 	element_counts = {}
 	for f in os.listdir(directory):
@@ -158,16 +159,15 @@ def convert_to_db_files(feed_details, directory, sp):
 					for k in row:
 						error = validate(element_name, k, type_vals[k]["type"], row, type_vals[k]["is_required"])
 					if "error_details" in error:
-						error_data.append(error)
-						continue
+						error_data.append(error) #need to parse out different between errors and warnings
 					if "id" in row:
 						row["feed_id"] = row.pop("id")
 						if element_name == "source":
 							row["feed_id"] = 1
 						if row["feed_id"] not in feed_ids:
-							feed_ids.append(row["feed_id"]
+							feed_ids[row["feed_id"]] = None
 						else:
-							#non-unique id's in feed, error report
+							error_data.append({'base_element':element_name,'error_element':'id','id':row["feed_id"],'error_details':'Element ID is not unique to the feed'})
 							continue
 					row["vip_id"] = feed_details["vip_id"]
 					row["election_id"] = feed_details["election_id"]
@@ -258,7 +258,7 @@ def get_feed_details(directory):
 			with open(directory + fname, "r") as f:
 				reader = csv.DictReader(f)
 				row = reader.next()
-				for val in details_dict[dd]:
+				for val in details_dict[fname]:
 					feed_details[val] = row[val] 
 	except:
 		return feed_details
