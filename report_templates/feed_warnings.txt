@@ -1,1 +1,1 @@
-element_name,id,warning_details
+base_element,id,problem_element,id,warning_details
