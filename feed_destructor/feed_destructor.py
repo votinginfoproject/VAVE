@@ -92,7 +92,11 @@ def main():
 
 	update_data(feed_details, element_counts, DIRECTORIES["temp"], DIRECTORIES["archives"])	
 
-	er.more_summary(feed_details, element_counts)
+	er.e_count_summary(feed_details, element_counts)
+
+	db_validations(feed_details)
+
+	generate_feed(feed_details)
 
 def update_data(feed_details, element_counts, directory, archives):
 
@@ -123,9 +127,10 @@ def update_data(feed_details, element_counts, directory, archives):
 			meta_conn.commit()
 			os.rename(directory + f, archives + element_name + "_" + file_time_stamp + ".txt")
 		if new_hash != hash_val:
-			#TODO:Delete from, could be too many rows so I need to configure postgres to correctly partition
-			#the data based on vip/election id, and then just drop the partition, otherwise could write a query to
-			#join all valid data into a new table and rename
+			#might configure postgres to partition based on vip/election id and then drop partition,
+			#or write a query to join valid data into a new table and rename
+			vip_cursor.execute("DELETE FROM " + element_name + " WHERE vip_id = " + str(feed_details["vip_id"]) + " AND election_id = " + str(feed_details["election_id"]))
+			vip_conn.commit()
 			r = csv.DictReader(open(directory+f, "r"))
 			copy_statement = COPY_SQL_STATEMENT.format(element_name, ",".join(r.fieldnames), "/tmp/temp/"+ f)
 			print "upload to database " + element_name + " data"
