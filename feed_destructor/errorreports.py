@@ -57,12 +57,12 @@ def election_summary(feed_details, writer):
 	writer.write("Election Date: " + str(feed_details["date"]) + "\n")
 	writer.write("Election Type: " + str(feed_details["election_type"]) + "\n\n")
 
-def feed_errors(feed_details, error_data):
-	fname = "feed_errors_" + feed_details["file_time_stamp"] + ".txt"
+def feed_issues(feed_details, problem_data, issue_type):
+	fname = "feed_" + issue_type + "_" + feed_details["file_time_stamp"] + ".txt"
 	cur_dir = REPORT_DIRECTORY + str(feed_details["vip_id"]) + "/current/"
 	arc_dir = REPORT_DIRECTORY + str(feed_details["vip_id"]) + "/archives/"
 	with open(cur_dir + fname, "a") as writer:
-		out = DictWriter(writer, fieldnames=['base_element','id','error_element','error_details'])
+		out = DictWriter(writer, fieldnames=['base_element','id','problem_element',issue_type+'_details'])
 		out.writeheader()
 		for row in error_data:
 			out.writerow(row)
