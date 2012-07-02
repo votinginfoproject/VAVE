@@ -62,23 +62,20 @@ def feed_issues(feed_details, problem_data, issue_type):
 	cur_dir = REPORT_DIRECTORY + str(feed_details["vip_id"]) + "/current/"
 	arc_dir = REPORT_DIRECTORY + str(feed_details["vip_id"]) + "/archives/"
 	with open(cur_dir + fname, "a") as writer:
-		out = DictWriter(writer, fieldnames=['base_element','id','problem_element',issue_type+'_details'])
+		out = DictWriter(writer, fieldnames=problem_data[0].keys())
 		out.writeheader()
-		for row in error_data:
+		for row in problem_data:
 			out.writerow(row)
 	copyfile(cur_dir + fname, arc_dir + fname)
 
-def extend_summary(feed_details, element_counts):
+def e_count_summary(feed_details, element_counts):
 	fname = "report_summary_" + feed_details["file_time_stamp"] + ".txt"
 
 	directory = REPORT_DIRECTORY + str(feed_details["vip_id"]) + "/"
 	with open(directory + "current/" + fname, "a") as w:
 		writer.write("----------------------\nElement Counts\n----------------------\n\n")
-	writer.write("Name: " + feed_details["name"] + "\n")
-	writer.write("Vip ID: " + str(feed_details["vip_id"]) + "\n")
-	writer.write("Datetime: " + str(feed_details["datetime"]) + "\n\n")
-
-		summary_header(feed_details, w)
-		election_summary(feed_details, w)
-		file_summary(valid_files, invalid_files, invalid_sections, w)
+		for elem in element_counts:
+			writer.write(elem + "\n")
+			writer.write("\t- original:" + str(element_counts[elem]['original'])+"\n")
+			writer.write("\t- processed:" + str(element_counts[elem]['processed']) + "\n")
 	copyfile(directory + "current/" + fname, directory + "archives/" + fname)	
