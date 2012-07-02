@@ -33,8 +33,6 @@ URL_REGEX = re.compile("http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-
 PHONE_REGEX = re.compile("1?\s*\W?\s*([2-9][0-8][0-9])\s*\W?\s*([2-9][0-9]{2})\s*\W?\s*([0-9]{4})(\se?x?t?(\d*))?")
 VALID_DIRECTIONS = ['n','s','e','w','nw','ne','sw','se','north','south','east','west','northeast','northwest','southeast','southwest']
 
-#TODO:Based on element with error, add to warning list or error list
-
 def main():
 
 	print "setting up directories..."
@@ -140,9 +138,10 @@ def update_data(feed_details, element_counts, directory, archives):
 			os.rename(directory + f, archives + element_name + "_" + file_time_stamp + ".txt")
 
 def convert_to_db_files(feed_details, directory, sp):
-	
+
 	feed_ids = {}
 	error_data = []
+	warning_data = []
 	element_counts = {}
 	for f in os.listdir(directory):
 		element_name, extension = f.lower().split(".")
@@ -169,7 +168,9 @@ def convert_to_db_files(feed_details, directory, sp):
 					for k in row:
 						error = validate(element_name, k, type_vals[k]["type"], row, type_vals[k]["is_required"])
 						if "error_details" in error:
-							error_data.append(error) #need to parse out different between errors and warnings
+							error_data.append(error)
+						elif "warning_details" in error:
+							warning_data.append(error)
 					if "id" in row:
 						row["feed_id"] = row.pop("id")
 						if element_name == "source":
@@ -189,12 +190,13 @@ def convert_to_db_files(feed_details, directory, sp):
 		os.remove(directory + f)
 		os.rename(directory + element_name + "_db.txt", directory + f)
 		print "finished conversion"
-	er.feed_errors(feed_details, error_data)
+	er.feed_issues(feed_details, error_data, "error")
+	er.feed_issues(feed_details, warning_data, "warning")
 	return element_counts
 
 def validate(e_name, key, xml_type, row, required):
 
-	error_dict = {'base_element':e_name, 'error_element':key}
+	error_dict = {'base_element':e_name, 'problem_element':key}
 	if "id" in row:
 		error_dict["id"] = row["id"]
 	else:
@@ -216,21 +218,21 @@ def validate(e_name, key, xml_type, row, required):
 		if row[key].find("<") >= 0: #need to add in other invalid character checks
 			error_dict["error_details"] = 'Invalid character in string:"'+row[key]+'"'
 		elif key == "zip" and not ZIPCODE_REGEX.match(row[key]):
-			error_dict["error_details"] = 'Invalid Zip:"'+row[key]+'"'
+			error_dict["warning_details"] = 'Invalid Zip:"'+row[key]+'"'
 		elif key == "email" and not EMAIL_REGEX.match(row[key]):
-			error_dict["error_details"] = 'Invalid Email:"'+row[key]+'"'
+			error_dict["warning_details"] = 'Invalid Email:"'+row[key]+'"'
 		elif key.endswith("_url") and not URL_REGEX.match(row[key]):
-			error_dict["error_details"] = 'Invalid URL:"'+row[key]+'"'
+			error_dict["warning_details"] = 'Invalid URL:"'+row[key]+'"'
 		elif key == "state" and len(row[key]) != 2:
-			error_dict["error_details"] = 'Invalid state abbreviation:"'+row[key]+'"'
+			error_dict["warning_details"] = 'Invalid state abbreviation:"'+row[key]+'"'
 		elif key == "locality" and row[key].lower() not in LOCALITY_TYPES:
 			error_dict["error_details"] = 'Invalid type:"'+row[key]+'"'
 		elif (key == "phone" or key == "fax") and not PHONE_REGEX.match(row[key].lower()):
-			error_dict["error_details"] = 'Invalid phone:"'+row[key]+'"' 
+			error_dict["warning_details"] = 'Invalid phone:"'+row[key]+'"' 
 		elif key.endswith("_direction") and row[key].lower().replace(' ','') not in VALID_DIRECTIONS:
 			error_dict["error_details"] = 'Invalid direction:"'+row[key]+'"'
 		elif key.find("hours") >= 0 and (row[key].find("to") >= 0 or row[key].find("-") >= 0):#can be improved, just a naive check to make sure there is some hour range value
-			error_dict["error_details"] = 'No hour range provided:"'+row[key]+'"'
+			error_dict["warning_details"] = 'No hour range provided:"'+row[key]+'"'
 	elif xml_type == "xs:date":
 		try:
 			strptime(row[key],"%Y-%m-%d")
