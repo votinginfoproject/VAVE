@@ -94,9 +94,38 @@ def main():
 
 	er.e_count_summary(feed_details, element_counts)
 
-	db_validations(feed_details)
+	db_validations(feed_details, sp)
 
 	generate_feed(feed_details)
+
+def db_validations(feed_details, sp):
+	conn = psycopg2.connect(host="localhost", database="vip", user="username", password="password")
+	cursor = conn.cursor(cursor_factory=extras.ReadDictCursor)
+	table_columns = sp.full_header_data("db")
+	tables = header_data.keys()
+	duplicate_data = []
+	error_data = []
+	for t in tables:
+		if t = "street_segment":
+			continue
+		query = "SELECT t1.feed_id AS 'id', t2.feed_id AS 'duplicate_id' FROM " + t + " t1, " + t + " t2 WHERE t1.election_id = " + str(feed_details["election_id"]) + " AND t2.election_id = " + str(feed_details["election_id"]) + " AND t1.vip_id = " + str(feed_details["vip_id"]) + " AND t2.vip_id = " + str(feed_details["vip_id"]) + " AND t1.feed_id != t2.feed_id "
+		for column in table_columns[t]:
+			if column == "id":
+				continue
+			query += " AND t1." + column + " = t2." + column
+		cursor.execute(query)
+		duplicates = cursor.fetchall()
+		for d in duplicates:
+			duplicate_data.append({"element_name":t,"id":d['id'],"duplicate_id":d['duplicate_id']})
+		for column in table_columns[t]:
+			if column.endswith("_id") and column[:-3] in tables:
+				query = "SELECT " + column + ", feed_id FROM " + t " WHERE election_id = " + str(feed_details["election_id"]) + " AND vip_id = " + str(feed_details["vip_id"]) + " AND " + column + " NOT IN (SELECT feed_id FROM " + column[:-3] + " WHERE vip_id = " + str(feed_details["vip_id"]) + " AND election_id = " + str(feed_details["election_id"])
+				cursor.execute(query)
+				missing_ids = cursor.fetchall()
+				for m in missing_ids:
+					error_data.append({'base_element':t,'problem_element':column,'id':m["feed_id"],'error_details':'Missing element mapping, ' + column + ' with id of ' + m[column] + ' does not exist'})
+	er.feed_issues(feed_details, error_data, "error")
+	er.feed_issues(feed_details, duplicate_date, "duplicate")
 
 def update_data(feed_details, element_counts, directory, archives):
 
