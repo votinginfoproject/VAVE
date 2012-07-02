@@ -58,7 +58,7 @@ def election_summary(feed_details, writer):
 	writer.write("Election Type: " + str(feed_details["election_type"]) + "\n\n")
 
 def feed_issues(feed_details, problem_data, issue_type):
-	fname = "feed_" + issue_type + "_" + feed_details["file_time_stamp"] + ".txt"
+	fname = "feed_" + issue_type + "s_" + feed_details["file_time_stamp"] + ".txt"
 	cur_dir = REPORT_DIRECTORY + str(feed_details["vip_id"]) + "/current/"
 	arc_dir = REPORT_DIRECTORY + str(feed_details["vip_id"]) + "/archives/"
 	with open(cur_dir + fname, "a") as writer:
@@ -68,3 +68,17 @@ def feed_issues(feed_details, problem_data, issue_type):
 			out.writerow(row)
 	copyfile(cur_dir + fname, arc_dir + fname)
 
+def extend_summary(feed_details, element_counts):
+	fname = "report_summary_" + feed_details["file_time_stamp"] + ".txt"
+
+	directory = REPORT_DIRECTORY + str(feed_details["vip_id"]) + "/"
+	with open(directory + "current/" + fname, "a") as w:
+		writer.write("----------------------\nElement Counts\n----------------------\n\n")
+	writer.write("Name: " + feed_details["name"] + "\n")
+	writer.write("Vip ID: " + str(feed_details["vip_id"]) + "\n")
+	writer.write("Datetime: " + str(feed_details["datetime"]) + "\n\n")
+
+		summary_header(feed_details, w)
+		election_summary(feed_details, w)
+		file_summary(valid_files, invalid_files, invalid_sections, w)
+	copyfile(directory + "current/" + fname, directory + "archives/" + fname)	
