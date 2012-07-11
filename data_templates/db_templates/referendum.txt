@@ -1,1 +1,0 @@
-title,subtitle,brief,text,pro_statement,con_statement,passage_threshold,effect_of_abstain,id

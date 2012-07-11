@@ -1,1 +1,0 @@
-name,precinct_id,ballot_style_image_url,id
