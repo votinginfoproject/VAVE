@@ -140,7 +140,7 @@ def db_validations(feed_details, sp):
 	even_mismatch = cursor.fetchall()
 	for even in even_mismatch:
 		warning_data.append({'base_element':'street_segment','id':m["feed_id"],'problem_element':'odd_even_both','error_details':'Start and ending house numbers should be even when odd_even_both is set to even'})
-	query = "SELECT s1.feed_id, s1.starting_house_number, s1.ending_house_number, s1.odd_even_both, s1.precinct_id, s2.feed_id, s2.starting_house_number, s2.ending_house_number, s2.odd_even_both, s2.precinct_id FROM street_segment s1, street_segment s2 WHERE s1.election_id = " + str(feed_details["election_id"]) + " AND s1.vip_id = " + str(feed_details["vip_id"]) + " AND s2.election_id = s1.election_id AND s2.vip_id = s1.vip_id AND s1.feed_id != s2.feed_id AND s1.start_house_number BETWEEN s2.start_house_number AND s2.end_house_number AND s1.odd_even_both = s2.odd_even_both AND ((s1.non_house_address_street_direction IS NULL AND s2.non_house_address_street_direction IS NULL) OR s1.non_house_address_street_direction = s2.non_house_address_street_direction) AND ((s1.non_house_address_street_suffix IS NULL AND s2.non_house_address_street_suffix IS NULL) OR s1.non_house_address_street_suffix = s2.non_house_address_street_suffix) AND s1.non_house_address_street_name = s2.non_house_address_street_name AND s1.non_house_address_city = s2.non_house_address_city AND s1.non_house_address_state = s2.non_house_address_state AND s1.non_house_address_zip = s2.non_house_address_zip"
+	query = "SELECT s1.feed_id, s1.start_house_number, s1.end_house_number, s1.odd_even_both, s1.precinct_id, s2.feed_id, s2.start_house_number, s2.end_house_number, s2.odd_even_both, s2.precinct_id FROM street_segment s1, street_segment s2 WHERE s1.election_id = " + str(feed_details["election_id"]) + " AND s1.vip_id = " + str(feed_details["vip_id"]) + " AND s2.election_id = s1.election_id AND s2.vip_id = s1.vip_id AND s1.feed_id != s2.feed_id AND s1.start_house_number BETWEEN s2.start_house_number AND s2.end_house_number AND s1.odd_even_both = s2.odd_even_both AND ((s1.non_house_address_street_direction IS NULL AND s2.non_house_address_street_direction IS NULL) OR s1.non_house_address_street_direction = s2.non_house_address_street_direction) AND ((s1.non_house_address_street_suffix IS NULL AND s2.non_house_address_street_suffix IS NULL) OR s1.non_house_address_street_suffix = s2.non_house_address_street_suffix) AND s1.non_house_address_street_name = s2.non_house_address_street_name AND s1.non_house_address_city = s2.non_house_address_city AND s1.non_house_address_state = s2.non_house_address_state AND s1.non_house_address_zip = s2.non_house_address_zip"
 	cursor.execute(query)
 	segment_issues = cursor.fetchall()
 	
@@ -356,13 +356,15 @@ def process_config(directory, config_file, schema_props):
 	config = ConfigParser()
 	config.read(config_file)
 	sections = config.sections()
-	if any(s not in schema_props.key_list("element") for s in sections):
-		if all(s in schema_props.key_list("db") for s in sections):
-			invalid_sections = fc.invalid_config_sections(directory, config_file, schema_props.full_header_data("db"))
-		else:
-			print "sections error!!!"
-	else:
+	
+	db_or_element = db_or_element_format(schema_props, sections)
+	
+	if db_or_element = "db":
+		invalid_sections = fc.invalid_config_sections(directory, config_file, schema_props.full_header_data("db"))
+	elif db_or_element = "element":
 		invalid_sections = fc.invalid_config_sections(directory, config_file, schema_props.full_header_data("element"))
+	else:
+		return "error"
 
 	for s in sections:
 		fname = config.get(s, "file_name")
@@ -381,32 +383,50 @@ def process_config(directory, config_file, schema_props):
 	os.remove(config_file)
 	return invalid_sections
 
+#similar to directory tools search except this returns a file/element dict
+#and uses listdir on a flattened folder instead of the slower os.walk
+def files_ename_by_extension(directory, extension):
+	f_list = {}
+	for f in os.listdir(directory):
+		element_name, f_exten = f.lower()split(".")
+		if f_exten = extension:
+			f_list[f] = element_name
+	return f_list
+
+def db_or_element_format(sp, check_list):
+	if any(vals not in sp.key_list("element") for vals in check_list):
+		if all(vals in sp.key_list("db") for vals in check_list):
+			return "db"
+		else:
+			return "error"
+	else:
+		return "element"
+
 #check flat file format, if element format, check then convert to element format
 #if db format, check and then leave alone
-def process_flatfiles(directory, schema_props):
+def process_flatfiles(directory, sp):
 
-	file_list = {}
-	for f in os.listdir(directory):
-		element_name, extension = f.lower().split(".")
-		if extension == "txt":
-			file_list[f] = element_name
+	file_list = files_ename_by_extension(directory, "txt")
 
-	if any(vals not in schema_props.key_list("element") for vals in file_list.values()):
-		if all(vals in schema_props.key_list("db") for vals in file_list.values()):
-			invalid_files = fc.invalid_files(directory, file_list, schema_props.full_header_data("db"))
-		else:
-			print "file error!!!"
-	else:
-		invalid_files = fc.invalid_files(directory, file_list, schema_props.full_header_data("element"))
+	db_or_element = db_or_element_format(sp, file_list.values()
+	
+	if db_or_element == "db":
+		invalid_files = fc.invalid_files(directory, file_list, sp.full_header_data("db"))
+	elif db_or_element = "element":
+		invalid_files = fc.invalid_files(directory, file_list, sp.full_header_data("element"))
 		for k, v in file_list.iteritems():
-			if k in invalid_files:
-				os.remove(directory + k)
-			else:
-				valid_files = convert_data(directory, k, v, schema_props.conversion_by_element(v))
+			if k not in invalid_files:
+				valid_files = convert_data(directory, k, v, sp.conversion_by_element(v))
+	else:
+		return "error"
+
+	for f in invalid_files:
+		os.remove(directory + f)
+
 	return invalid_files
 
 #converts data from element format to db format. Currently opens and reads
-#through the whole file each time, splitting on each row was actually slower
+#through the whole file each time, splitting on each row was significantly slower
 def convert_data(directory, fname, element, conversion_dict):
 	for conversion in conversion_dict:
 		with open(directory + fname, "r") as f:
