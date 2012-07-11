@@ -359,9 +359,9 @@ def process_config(directory, config_file, schema_props):
 	
 	db_or_element = db_or_element_format(schema_props, sections)
 	
-	if db_or_element = "db":
+	if db_or_element == "db":
 		invalid_sections = fc.invalid_config_sections(directory, config_file, schema_props.full_header_data("db"))
-	elif db_or_element = "element":
+	elif db_or_element == "element":
 		invalid_sections = fc.invalid_config_sections(directory, config_file, schema_props.full_header_data("element"))
 	else:
 		return "error"
@@ -389,7 +389,7 @@ def files_ename_by_extension(directory, extension):
 	f_list = {}
 	for f in os.listdir(directory):
 		element_name, f_exten = f.lower()split(".")
-		if f_exten = extension:
+		if f_exten == extension:
 			f_list[f] = element_name
 	return f_list
 
@@ -412,7 +412,7 @@ def process_flatfiles(directory, sp):
 	
 	if db_or_element == "db":
 		invalid_files = fc.invalid_files(directory, file_list, sp.full_header_data("db"))
-	elif db_or_element = "element":
+	elif db_or_element == "element":
 		invalid_files = fc.invalid_files(directory, file_list, sp.full_header_data("element"))
 		for k, v in file_list.iteritems():
 			if k not in invalid_files:
