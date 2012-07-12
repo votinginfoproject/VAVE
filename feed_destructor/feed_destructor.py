@@ -351,18 +351,18 @@ def get_feed_details(directory):
 	return feed_details
 
 #add in header to all valid formatted files, delete invalid files
-def process_config(directory, config_file, schema_props):
+def process_config(directory, config_file, sp):
 	
 	config = ConfigParser()
 	config.read(config_file)
 	sections = config.sections()
 	
-	db_or_element = db_or_element_format(schema_props, sections)
+	db_or_element = db_or_element_format(sp, sections)
 	
 	if db_or_element == "db":
-		invalid_sections = fc.invalid_config_sections(directory, config_file, schema_props.full_header_data("db"))
+		invalid_sections = fc.invalid_config_sections(directory, config_file, sp.full_header_data("db"))
 	elif db_or_element == "element":
-		invalid_sections = fc.invalid_config_sections(directory, config_file, schema_props.full_header_data("element"))
+		invalid_sections = fc.invalid_config_sections(directory, config_file, sp.full_header_data("element"))
 	else:
 		return "error"
 
