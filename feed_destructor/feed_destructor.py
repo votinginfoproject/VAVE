@@ -8,15 +8,14 @@ import feedtoflatfiles as ftff
 import errorreports as er
 from schemaprops import SchemaProps
 from ConfigParser import ConfigParser
-import psycopg2
 import csv
-from psycopg2 import extras
 from shutil import copyfile
 import hashlib
 from datetime import datetime
 from time import strptime
 import sys
 import re
+from vavedb import VaveDB
 
 DIRECTORIES = {"temp":"/tmp/temp/", "archives":"/tmp/archives/"}
 SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
@@ -55,7 +54,7 @@ def main():
 	print "done unpacking and flattening"
 
 	sp = SchemaProps()
-	feed_details = {"file":unpack_file, "process_time":process_time, "file_time_stamp":file_time_stamp}
+	file_details = {"file":unpack_file, "process_time":process_time, "file_time_stamp":file_time_stamp}
 	invalid_sections = []
 	invalid_files = []
 	valid_files = []
@@ -76,14 +75,24 @@ def main():
 	print "done processing xml files"
 
 	print "getting feed details..."
-	feed_details.update(get_feed_details(DIRECTORIES["temp"]))
-	print "done getting feed details"
-
-	print "writing initial report..."
-	er.report_summary(feed_details, valid_files, invalid_files, invalid_sections)
-	if "vip_id" not in feed_details or "election_id" not in feed_details:
+	db = VaveDB("localhost","vip","username","password")
+	feed_details = {}
+	try:
+		with open(DIRECTORIES["temp"] + "source.txt", "r") as f:
+			reader = csv.DictReader(f)
+			row = reader.next()
+			feed_details["vip_id"] = row["vip_id"]
+		with open(DIRECTORIES["temp"] + "election.txt", "r") as f:
+			reader = csv.DictReader(f)
+			row = reader.next()
+			feed_details["election_date"] = row["date"]
+			feed_details["election_type"] = row["election_type"]
+	except:
+		er.report_summary(feed_details, file_details, valid_files, invalid_files, invalid_sections)
 		return
-	print "done writing initial report"
+
+	feed_details["election_id"] = db.get_election_id(feed_details)
+	print "done getting feed details"
 
 	print "converting to full db files...."
 	element_counts = convert_to_db_files(feed_details, DIRECTORIES["temp"], sp)
@@ -315,40 +324,6 @@ def file_hash(fname):
 		for data in fh.read(8192):
 			m.update(data)
 	return m.hexdigest()
-
-def get_feed_details(directory):
-
-	feed_details = {}
-	conn = psycopg2.connect(host="localhost", database="vip_metadata", user="username", password="password")
-	cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
-	details_dict = {'source.txt':['vip_id','name','datetime'],
-			'election.txt':['date','election_type']}
-	
-	try:
-		for fname in details_dict:
-			with open(directory + fname, "r") as f:
-				reader = csv.DictReader(f)
-				row = reader.next()
-				for val in details_dict[fname]:
-					feed_details[val] = row[val] 
-	except:
-		return feed_details
-	
-	cursor.execute("SELECT * FROM elections WHERE vip_id = " + str(feed_details["vip_id"]) + " AND election_date = '" + feed_details["date"] + "' AND election_type = '" + feed_details["election_type"] + "'")
-	election_data = cursor.fetchone()
-	if not election_data:
-		cursor.execute("SELECT GREATEST(election_id) FROM elections")
-		last_id = cursor.fetchone()
-		if not last_id:
-			new_id = DEFAULT_ELECTION_ID
-		else:
-			new_id = int(last_id["greatest"]) + 1
-		cursor.execute("INSERT INTO elections (vip_id, election_date, election_type, election_id) VALUES ('" + str(feed_details["vip_id"]) + "','" + feed_details["date"] + "','" + feed_details["election_type"] + "','" + str(new_id) + "')")
-		conn.commit()
-		feed_details["election_id"] = new_id
-	else:
-		feed_details["election_id"] = election_data["election_id"]
-	return feed_details
 
 #add in header to all valid formatted files, delete invalid files
 def process_config(directory, config_file, sp):
