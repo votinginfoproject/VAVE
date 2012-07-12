@@ -7,7 +7,7 @@ class EasySQL:
 		self.conn = psycopg2.connect(host=h,database=db,user=u,password=pw)
 		self.cursor = self.conn.cursor(cursor_factor=extras.RealDictCursor)
 
-	def basic_select(self, table, *vals=None, conditions=None):
+	def basic_select(self, table, vals=None, conditions=None):
 		query = "SELECT "
 		if not vals:
 			query += " * "
@@ -18,7 +18,7 @@ class EasySQL:
 			query += ' AND '.join(["{0} {1} '{2}'".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in conditions])
 		return query
 	
-	def select(self, *tables, *vals=None, conditions=None, result_count=None):
+	def select(self, tables, vals=None, conditions=None, result_count=None):
 
 		if conditions:
 			conditions = self.clean_conditions(conditions)
@@ -34,6 +34,18 @@ class EasySQL:
 		else:
 			return self.cursor.fetchall()[0:result_count-1]
 
+	def row_insert(self, table, vals):
+		query = "INSERT INTO " + table + "("
+		query += ','.join(vals.keys()) + ")"
+		query += " VALUES ('" + "','".join(vals.values()) + "')"
+		return query
+
+	def insert(self, table, vals):
+		for v in vals:
+			query = self.row_insert(table, v)
+			self.cursor.execute(query)
+			self.conn.commit()
+
 	def clean_conditions(self, conditions):
 		temp_conditions = {}
 		for k, v in conditions.items():
@@ -42,13 +54,3 @@ class EasySQL:
 			else:
 				temp_conditions[k] = {'compare_to':v, 'condition':'='}
 		return temp_conditions
-			
-	def get_election_id(self, feed_details):
-		query = "SELECT election_id FROM elections WHERE " + ' AND '.join(["{0} = '{1}'".format(key, value) for (key, value) in feed_details.items()])
-		self.cursor.execute(query)
-		result = self.cursor.fetchone()
-		if not result:
-			self.cursor.execute("SELECT GREATEST(election_id) FROM elections")
-			last_id = self.cursor.fetchone()
-			if not last_id:
-
