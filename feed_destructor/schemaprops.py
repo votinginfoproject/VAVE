@@ -165,4 +165,5 @@ if __name__ == "__main__":
 	print sp.type_data("element", "precinct")
 	print sp.full_type_data("db")
 	print sp.full_type_data("element")
+	print sp.full_header_data("db")
 	
