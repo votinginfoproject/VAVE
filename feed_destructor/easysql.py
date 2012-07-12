@@ -1,5 +1,6 @@
 import psycopg2
 from psycopg2 import extras
+import sys
 
 class EasySQL:
 
@@ -15,7 +16,7 @@ class EasySQL:
 			query += ','.join(vals)
 		query += " FROM " + table
 		if conditions:
-			query += ' AND '.join(["{0} {1} '{2}'".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in conditions])
+			query += " WHERE " + ' AND '.join(["{0} {1} '{2}'".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in conditions])
 		return query
 	
 	def select(self, tables, vals=None, conditions=None, result_count=None):
@@ -45,6 +46,28 @@ class EasySQL:
 			query = self.row_insert(table, v)
 			self.cursor.execute(query)
 			self.conn.commit()
+
+	def copy_upload(self, table, vals ,file_name):
+		query = "COPY {0}({1}) FROM '{2}' WITH CSV HEADER".format(table, ",".join(vals), file_name)
+		self.cursor.copy_expert(query, sys.stdin)
+		self.conn.commit()
+
+	def update(self, table, set_vals, conditions=None):
+		query = "UPDATE " + table
+		query += " SET " + ','.join(["{0} = '{1}'".format(k,v) for (k,v) in set_vals.items()])
+		if conditions:
+			conditions = self.clean_conditions(conditions)
+			query += " WHERE " + ' AND '.join(["{0} {1} '{2}'".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in conditions])
+		self.cursor.execute(query)
+
+	def delete(self, table, conditions=None):
+		if conditions:
+			conditions = self.clean_conditions(conditions)
+			query = "DELETE FROM " + table + " WHERE " + ' AND '.join(["{0} {1} '{2}'".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in conditions])
+		else:
+			query = "TRUNCATE " + table
+		self.cursor.execute(query)
+		self.conn.commit()
 
 	def clean_conditions(self, conditions):
 		temp_conditions = {}
