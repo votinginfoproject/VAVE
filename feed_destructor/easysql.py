@@ -23,7 +23,7 @@ class EasySQL:
 
 		if conditions:
 			conditions = self.clean_conditions(conditions)
-		if len(tables) == 1:
+		if len(tables) == 1:#also need to check conditions for special values ie 'not in'
 			query = self.basic_select(tables[0], vals, conditions)
 
 		self.cursor.execute(query)
@@ -34,6 +34,21 @@ class EasySQL:
 			return self.cursor.fetchone()
 		else:
 			return self.cursor.fetchall()[0:result_count-1]
+
+	def leftjoin(self, base_table, base_vals, base_conditions, join_table, join_vals, join_conditions, join_comparisons):
+		query = "SELECT t1." + ",t1.".join(base_vals) + ",t2." + ",t2.".join(join_vals)
+		query += " FROM " + base_table
+		query += " JOIN " + join_table + " ON ("
+		query += ' AND '.join(["{0} {1} '{2}'".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in join_comparisons]) + ")"
+		if len(base_conditions) > 0 and len(join_conditions) > 0:
+			query += ' WHERE ' + ' AND '.join(["{0} {1} '{2}'".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in base_conditions])
+			query += ' AND ' + ' AND '.join(["{0} {1} '{2}'".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in join_conditions])
+		elif len(base_conditions) > 0:
+			query += ' WHERE ' + ' AND '.join(["{0} {1} '{2}'".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in base_conditions])
+		elif len(join_conditions) > 0:
+			query += ' WHERE ' + ' AND '.join(["{0} {1} '{2}'".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in join_conditions])
+		self.cursor.execute(query)
+		return self.cursor.fetchall()
 
 	def row_insert(self, table, vals):
 		query = "INSERT INTO " + table + "("
@@ -46,7 +61,7 @@ class EasySQL:
 			query = self.row_insert(table, v)
 			self.cursor.execute(query)
 			self.conn.commit()
-
+	
 	def copy_upload(self, table, vals ,file_name):
 		query = "COPY {0}({1}) FROM '{2}' WITH CSV HEADER".format(table, ",".join(vals), file_name)
 		self.cursor.copy_expert(query, sys.stdin)
