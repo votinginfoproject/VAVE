@@ -145,9 +145,7 @@ def update_data(vip_id, election_id, db, element_counts, directory, archives):
 			db.update('meta_feed_data',{'element_count':element_count},{'file_name':k,'vip_id':vip_id,'election_id':election_id})
 			os.rename(full_path,archives+v+"_"+time_stamp+".txt")
 
-def db_validations(feed_details, sp):
-	conn = psycopg2.connect(host="localhost", database="vip", user="username", password="password")
-	cursor = conn.cursor(cursor_factory=extras.ReadDictCursor)
+def db_validations(vip_id, election_id, db, feed_details, sp):
 	table_columns = sp.full_header_data("db")
 	tables = header_data.keys()
 	duplicate_data = []
@@ -156,14 +154,12 @@ def db_validations(feed_details, sp):
 	for t in tables:
 		if t == "street_segment":
 			continue
-		query = "SELECT t1.feed_id AS 'id', t2.feed_id AS 'duplicate_id' FROM " + t + " t1, " + t + " t2 WHERE t1.election_id = " + str(feed_details["election_id"]) + " AND t2.election_id = " + str(feed_details["election_id"]) + " AND t1.vip_id = " + str(feed_details["vip_id"]) + " AND t2.vip_id = " + str(feed_details["vip_id"]) + " AND t1.feed_id != t2.feed_id "
+		base_conditions = {'election_id':{'condition':'=','compare_to':election_id},'vip_id':{'condition':'=','compare_to':vip_id}}
 		for column in table_columns[t]:
-			if column == "id":
-				continue
-			query += " AND t1." + column + " = t2." + column
-		cursor.execute(query)
-		duplicates = cursor.fetchall()
-		for d in duplicates:
+			if column != "id":
+				join_comparisons[column] = '='
+		results = db.leftjoin(t, ['feed_id AS "id"'], base_conditions, t, ['feed_id AS "duplicate_id"'], {}, join_comparisons)
+		for d in results:
 			duplicate_data.append({"element_name":t,"id":d['id'],"duplicate_id":d['duplicate_id']})
 		for column in table_columns[t]:
 			if column.endswith("_id") and column[:-3] in tables:
@@ -172,20 +168,15 @@ def db_validations(feed_details, sp):
 				missing_ids = cursor.fetchall()
 				for m in missing_ids:
 					error_data.append({'base_element':t,'problem_element':column,'id':m["feed_id"],'error_details':'Missing element mapping, ' + column + ' with id of ' + m[column] + ' does not exist'})
-	query = "SELECT feed_id FROM street_segments WHERE start_house_number > end_house_number"
-	cursor.execute(query)
-	bad_house_numbers = cursor.fetchall()
+	
+	bad_house_numbers = db.select(['street_segments'],['feed_id'],{'election_id':election_id,'vip_id':vip_id,'start_house_number':{'condition':'>','compare_to':'end_house_number'}})
 	for house in bad_house_numbers:
 		error_data.append({'base_element':'street_segment','id':m["feed_id"],'problem_element':'start-end_house_number','error_details':'Starting house numbers must be less than ending house numbers'})
-	query = "SELECT feed_id from street_segments WHERE election_id = " + str(feed_details["election_id"]) + " AND vip_id = " + str(feed_details["vip_id"]) + " AND odd_even_both LIKE 'odd' AND (mod(start_house_number,2) = 0 OR mod(end_house_number,2) = 0)"
-	cursor.execute(query)
-	odd_mismatch = cursor.fetchall()
-	for odd in odd_mismatch:
+	results = db.custom_query("SELECT feed_id from street_segments WHERE election_id = " + str(election_id) + " AND vip_id = " + str(vip_id) + " AND odd_even_both LIKE 'odd' AND (mod(start_house_number,2) = 0 OR mod(end_house_number,2) = 0)")
+	for odd in results:
 		warning_data.append({'base_element':'street_segment','id':m["feed_id"],'problem_element':'odd_even_both','error_details':'Start and ending house numbers should be odd when odd_even_both is set to odd'})
-	query = "SELECT feed_id from street_segments WHERE election_id = " + str(feed_details["election_id"]) + " AND vip_id = " + str(feed_details["vip_id"]) + " AND odd_even_both LIKE 'even' AND (mod(start_house_number,1) = 0 OR mod(end_house_number,1) = 0)"
-	cursor.execute(query)
-	even_mismatch = cursor.fetchall()
-	for even in even_mismatch:
+	results = db.custom_query("SELECT feed_id from street_segments WHERE election_id = " + str(election_id) + " AND vip_id = " + str(vip_id) + " AND odd_even_both LIKE 'even' AND (mod(start_house_number,1) = 0 OR mod(end_house_number,1) = 0)"
+	for even in results:
 		warning_data.append({'base_element':'street_segment','id':m["feed_id"],'problem_element':'odd_even_both','error_details':'Start and ending house numbers should be even when odd_even_both is set to even'})
 	query = "SELECT s1.feed_id, s1.start_house_number, s1.end_house_number, s1.odd_even_both, s1.precinct_id, s2.feed_id, s2.start_house_number, s2.end_house_number, s2.odd_even_both, s2.precinct_id FROM street_segment s1, street_segment s2 WHERE s1.election_id = " + str(feed_details["election_id"]) + " AND s1.vip_id = " + str(feed_details["vip_id"]) + " AND s2.election_id = s1.election_id AND s2.vip_id = s1.vip_id AND s1.feed_id != s2.feed_id AND s1.start_house_number BETWEEN s2.start_house_number AND s2.end_house_number AND s1.odd_even_both = s2.odd_even_both AND ((s1.non_house_address_street_direction IS NULL AND s2.non_house_address_street_direction IS NULL) OR s1.non_house_address_street_direction = s2.non_house_address_street_direction) AND ((s1.non_house_address_street_suffix IS NULL AND s2.non_house_address_street_suffix IS NULL) OR s1.non_house_address_street_suffix = s2.non_house_address_street_suffix) AND s1.non_house_address_street_name = s2.non_house_address_street_name AND s1.non_house_address_city = s2.non_house_address_city AND s1.non_house_address_state = s2.non_house_address_state AND s1.non_house_address_zip = s2.non_house_address_zip"
 	cursor.execute(query)
