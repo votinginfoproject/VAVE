@@ -37,16 +37,16 @@ class EasySQL:
 
 	def leftjoin(self, base_table, base_vals, base_conditions, join_table, join_vals, join_conditions, join_comparisons):
 		query = "SELECT t1." + ",t1.".join(base_vals) + ",t2." + ",t2.".join(join_vals)
-		query += " FROM " + base_table
-		query += " JOIN " + join_table + " ON ("
-		query += ' AND '.join(["{0} {1} '{2}'".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in join_comparisons]) + ")"
+		query += " FROM " + base_table + " AS t1 "
+		query += " JOIN " + join_table + " AS t2 ON ("
+		query += ' AND '.join(["t1.{0} {1} t2.{0}".format(k,v) for k,v in join_comparisons.items()]) + ")"
 		if len(base_conditions) > 0 and len(join_conditions) > 0:
-			query += ' WHERE ' + ' AND '.join(["{0} {1} '{2}'".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in base_conditions])
-			query += ' AND ' + ' AND '.join(["{0} {1} '{2}'".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in join_conditions])
+			query += ' WHERE ' + ' AND '.join(["t1.{0} {1} '{2}'".format(k,base_conditions[k]['condition'],base_conditions[k]['compare_to']) for k in base_conditions])
+			query += ' AND ' + ' AND '.join(["t2.{0} {1} '{2}'".format(k,join_conditions[k]['condition'],join_conditions[k]['compare_to']) for k in join_conditions])
 		elif len(base_conditions) > 0:
-			query += ' WHERE ' + ' AND '.join(["{0} {1} '{2}'".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in base_conditions])
+			query += ' WHERE ' + ' AND '.join(["t1.{0} {1} '{2}'".format(k,base_conditions[k]['condition'],base_conditions[k]['compare_to']) for k in base_conditions])
 		elif len(join_conditions) > 0:
-			query += ' WHERE ' + ' AND '.join(["{0} {1} '{2}'".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in join_conditions])
+			query += ' WHERE ' + ' AND '.join(["t2.{0} {1} '{2}'".format(k,join_conditions[k]['condition'],join_conditions[k]['compare_to']) for k in join_conditions])
 		self.cursor.execute(query)
 		return self.cursor.fetchall()
 
@@ -100,3 +100,7 @@ class EasySQL:
 			else:
 				temp_conditions[k] = {'compare_to':v, 'condition':'='}
 		return temp_conditions
+
+if __name__ == '__main__':
+	es = EasySQL()
+	es.leftjoin('precinct',['feed_id AS "id"'],{'election_id':{'condition':'=','compare_to':'1000'},'vip_id':{'condition':'=','compare_to':'37'}},'precinct',['feed_id AS "duplicate_id"'],{},{'vip_id':'=','election_id':'=','feed_id':'!=','name':'='})
