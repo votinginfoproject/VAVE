@@ -8,7 +8,7 @@ class EasySQL:
 		self.conn = psycopg2.connect(host=h,database=db,user=u,password=pw)
 		self.cursor = self.conn.cursor(cursor_factory=extras.RealDictCursor)
 
-	def basic_select(self, table, vals=None, conditions=None):
+	def simple_select(self, table, vals=None, conditions=None):
 		query = "SELECT "
 		if not vals:
 			query += " * "
@@ -24,7 +24,7 @@ class EasySQL:
 		if conditions:
 			conditions = self.clean_conditions(conditions)
 		if len(tables) == 1:#also need to check conditions for special values ie 'not in'
-			query = self.basic_select(tables[0], vals, conditions)
+			query = self.simple_select(tables[0], vals, conditions)
 
 		self.cursor.execute(query)
 
