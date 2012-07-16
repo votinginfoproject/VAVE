@@ -13,7 +13,8 @@ class Schema:
 
 	def __init__(self, schemafile):
 
-		self.schema = self.create_schema(etree.parse(schemafile))
+		xmlparser = etree.XMLParser(remove_comments=True)
+		self.schema = self.create_schema(etree.parse(schemafile, xmlparser))
 	
 	def create_schema(self, schema_data):
 		def getXSVal(element): #removes namespace
@@ -68,8 +69,6 @@ class Schema:
 			for child in element.getchildren():
 				if child.get("name") is not None:
 					data[getXSVal(child)+"s"].append(get_elements(child))
-				elif str(child).startswith("<!"):
-					continue
 				elif tag in INDICATORS and getXSVal(child) in INDICATORS:
 					data["elements"].append(get_elements(child.getchildren()[0]))
 				else:
@@ -87,8 +86,6 @@ class Schema:
 		self.version = root.attrib["version"]
 		
 		for child in root.getchildren():
-			if str(child).startswith("<!"):
-				continue
 			c_type = getXSVal(child)
 			if child.get("name") is not None and not c_type in schema:
 				schema[c_type] = []
