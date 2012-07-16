@@ -163,10 +163,8 @@ def db_validations(vip_id, election_id, db, feed_details, sp):
 			duplicate_data.append({"element_name":t,"id":d['id'],"duplicate_id":d['duplicate_id']})
 		for column in table_columns[t]:
 			if column.endswith("_id") and column[:-3] in tables:
-				query = "SELECT " + column + ", feed_id FROM " + t + " WHERE election_id = " + str(feed_details["election_id"]) + " AND vip_id = " + str(feed_details["vip_id"]) + " AND " + column + " NOT IN (SELECT feed_id FROM " + column[:-3] + " WHERE vip_id = " + str(feed_details["vip_id"]) + " AND election_id = " + str(feed_details["election_id"])
-				cursor.execute(query)
-				missing_ids = cursor.fetchall()
-				for m in missing_ids:
+				results = db.custom_query("SELECT " + column + ", feed_id FROM " + t + " WHERE election_id = " + str(election_id) + " AND vip_id = " + str(vip_id) + " AND " + column + " NOT IN (SELECT feed_id FROM " + column[:-3] + " WHERE vip_id = " + str(vip_id) + " AND election_id = " + str(election_id))
+				for m in results:
 					error_data.append({'base_element':t,'problem_element':column,'id':m["feed_id"],'error_details':'Missing element mapping, ' + column + ' with id of ' + m[column] + ' does not exist'})
 	
 	bad_house_numbers = db.select(['street_segments'],['feed_id'],{'election_id':election_id,'vip_id':vip_id,'start_house_number':{'condition':'>','compare_to':'end_house_number'}})
@@ -178,9 +176,7 @@ def db_validations(vip_id, election_id, db, feed_details, sp):
 	results = db.custom_query("SELECT feed_id from street_segments WHERE election_id = " + str(election_id) + " AND vip_id = " + str(vip_id) + " AND odd_even_both LIKE 'even' AND (mod(start_house_number,1) = 0 OR mod(end_house_number,1) = 0)"
 	for even in results:
 		warning_data.append({'base_element':'street_segment','id':m["feed_id"],'problem_element':'odd_even_both','error_details':'Start and ending house numbers should be even when odd_even_both is set to even'})
-	query = "SELECT s1.feed_id, s1.start_house_number, s1.end_house_number, s1.odd_even_both, s1.precinct_id, s2.feed_id, s2.start_house_number, s2.end_house_number, s2.odd_even_both, s2.precinct_id FROM street_segment s1, street_segment s2 WHERE s1.election_id = " + str(feed_details["election_id"]) + " AND s1.vip_id = " + str(feed_details["vip_id"]) + " AND s2.election_id = s1.election_id AND s2.vip_id = s1.vip_id AND s1.feed_id != s2.feed_id AND s1.start_house_number BETWEEN s2.start_house_number AND s2.end_house_number AND s1.odd_even_both = s2.odd_even_both AND ((s1.non_house_address_street_direction IS NULL AND s2.non_house_address_street_direction IS NULL) OR s1.non_house_address_street_direction = s2.non_house_address_street_direction) AND ((s1.non_house_address_street_suffix IS NULL AND s2.non_house_address_street_suffix IS NULL) OR s1.non_house_address_street_suffix = s2.non_house_address_street_suffix) AND s1.non_house_address_street_name = s2.non_house_address_street_name AND s1.non_house_address_city = s2.non_house_address_city AND s1.non_house_address_state = s2.non_house_address_state AND s1.non_house_address_zip = s2.non_house_address_zip"
-	cursor.execute(query)
-	segment_issues = cursor.fetchall()
+	results = db.custom_query("SELECT s1.feed_id, s1.start_house_number, s1.end_house_number, s1.odd_even_both, s1.precinct_id, s2.feed_id, s2.start_house_number, s2.end_house_number, s2.odd_even_both, s2.precinct_id FROM street_segment s1, street_segment s2 WHERE s1.election_id = " + str(election_id) + " AND s1.vip_id = " + str(vip_id) + " AND s2.election_id = s1.election_id AND s2.vip_id = s1.vip_id AND s1.feed_id != s2.feed_id AND s1.start_house_number BETWEEN s2.start_house_number AND s2.end_house_number AND s1.odd_even_both = s2.odd_even_both AND s1.non_house_address_street_direction IS NOT DISTICT FROM s2.non_house_address_street_direction AND s1.non_house_address_street_suffix IS NOT DISTICT FROM s2.non_house_address_street_suffix AND s1.non_house_address_street_name = s2.non_house_address_street_name AND s1.non_house_address_city = s2.non_house_address_city AND s1.non_house_address_state = s2.non_house_address_state AND s1.non_house_address_zip = s2.non_house_address_zip")
 	
 	er.feed_issues(feed_details, error_data, "error")
 	er.feed_issues(feed_details, warning_data, "warning")
