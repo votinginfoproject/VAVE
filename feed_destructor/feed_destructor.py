@@ -17,10 +17,10 @@ import re
 from easysql import EasySQL
 
 DIRECTORIES = {"temp":"/tmp/temp/", "archives":"/tmp/archives/"}
-SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
 CONFIG_FILE = "vip.cfg"
 unpack_file = "test.zip"
-DEFAULT_ELECTION_ID = 1000
+DEFAULT_ELECT_ID = 1000
+SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
 REQUIRED_FILES = ["source.txt", "election.txt"]
 process_time = str(datetime.now())
 file_time_stamp = process_time[:process_time.rfind(".")].replace(":","-").replace(" ","_")
@@ -52,7 +52,7 @@ def main():
 
 	print "done unpacking and flattening"
 
-	sp = SchemaProps()
+	sp = SchemaProps(SCHEMA_URL)
 	file_details = {"file":unpack_file, "process_time":process_time, "file_time_stamp":file_time_stamp}
 	invalid_sections = []
 	invalid_files = []
@@ -89,16 +89,17 @@ def main():
 	except:
 		er.report_summary(feed_details, file_details, valid_files, invalid_files, invalid_sections)
 		return
+	er.report_setup(feed_details["vip_id"])
 
-	feed_details["election_id"] = get_election_id(feed_details, db)
+	election_id = get_election_id(feed_details, db)
 	print "done getting feed details"
 
 	print "converting to full db files...."
-	element_counts = convert_to_db_files(feed_details, DIRECTORIES["temp"], sp)
+	element_counts = convert_to_db_files(feed_details["vip_id"], election_id, file_time_stamp, DIRECTORIES["temp"], sp)
 
 	print "done converting to full db files"
 
-	update_data(feed_details["vip_id"], feed_details["election_id"], db, element_counts, DIRECTORIES["temp"], DIRECTORIES["archives"])	
+	update_data(feed_details["vip_id"], election_id, db, element_counts, DIRECTORIES["temp"], DIRECTORIES["archives"])	
 
 	er.e_count_summary(feed_details, element_counts)
 
@@ -107,25 +108,26 @@ def main():
 	generate_feed(feed_details)
 
 def get_election_id(feed_details, db):
-	table_list = ['elections']
+	table_list = ['meta_elections']
 	result = db.select(table_list,['election_id'],feed_details,1)
 	if not result:
-		last_id = db.select(table_list,'GREATEST(election_id)',None,1)
+		last_id = db.select(table_list,['GREATEST(election_id)'],None,1)
 		if not last_id:
 			new_id = DEFAULT_ELECT_ID
 		else:
 			new_id = int(last_id["greatest"]) + 1
-		feed_details["election_id"] = new_id
-		db.insert(table_list[0],feed_details)
+		feed_details["election_id"] = str(new_id)
+		print feed_details
+		db.insert(table_list[0],[feed_details])
 	else:
-		return result["election_id"]
-	return feed_details["election_id"]
+		return str(result["election_id"])
+	return str(feed_details["election_id"])
 
 def update_data(vip_id, election_id, db, element_counts, directory, archives):
 
 	file_list = files_ename_by_extension(directory, "txt")
 	for k, v in file_list.iteritems():
-		result = db.select(['meta_file_data'],['hash'],{'file_name':k,'vip_id':vip_id,'election_id':election_id})
+		result = db.select(['meta_file_data'],['hash'],{'file_name':k,'vip_id':vip_id,'election_id':election_id},1)
 		hash_val = None
 		full_path = directory + k
 		if result:
@@ -133,17 +135,17 @@ def update_data(vip_id, election_id, db, element_counts, directory, archives):
 		new_hash = file_hash(full_path)
 		if not hash_val:
 			r = csv.DictReader(open(full_path, "r"))
-			db.copy_upload(e_name, r.fieldnames, full_path)
-			db.insert('meta_file_data',{'file_name':k,'vip_id':vip_id,'election_id':election_id,'hash':new_hash})
-			db.insert('meta_feed_data',{'file_name':k,'vip_id':vip_id,'election_id':election_id,'element_count':element_counts["v"]})
-			os.rename(full_path,archives+v+"_"+time_stamp+".txt")
-		if new_hash != hash_val:
-			db.delete(element_name,{'vip_id':vip_id,'election_id':election_id})
+			db.copy_upload(v, r.fieldnames, full_path)
+			db.insert('meta_file_data',[{'file_name':k,'vip_id':vip_id,'election_id':election_id,'hash':new_hash}])
+			db.insert('meta_feed_data',[{'element':v,'vip_id':vip_id,'election_id':election_id,'element_count':element_counts[v]}])
+			os.rename(full_path,archives+v+"_"+file_time_stamp+".txt")
+		elif new_hash != hash_val:
+			db.delete(v,{'vip_id':vip_id,'election_id':election_id})
 			r = csv.DictReader(open(full_path, "r"))
 			db.copy_upload(e_name, r.fieldnames, full_path)
 			db.update('meta_file_data',{'hash':new_hash},{'file_name':k,'vip_id':vip_id,'election_id':election_id})
-			db.update('meta_feed_data',{'element_count':element_count},{'file_name':k,'vip_id':vip_id,'election_id':election_id})
-			os.rename(full_path,archives+v+"_"+time_stamp+".txt")
+			db.update('meta_feed_data',{'element_count':element_count},{'element':v,'vip_id':vip_id,'election_id':election_id})
+			os.rename(full_path,archives+v+"_"+file_time_stamp+".txt")
 
 def db_validations(vip_id, election_id, db, feed_details, sp):
 	table_columns = sp.full_header_data("db")
@@ -173,16 +175,18 @@ def db_validations(vip_id, election_id, db, feed_details, sp):
 	results = db.custom_query("SELECT feed_id from street_segments WHERE election_id = " + str(election_id) + " AND vip_id = " + str(vip_id) + " AND odd_even_both LIKE 'odd' AND (mod(start_house_number,2) = 0 OR mod(end_house_number,2) = 0)")
 	for odd in results:
 		warning_data.append({'base_element':'street_segment','id':m["feed_id"],'problem_element':'odd_even_both','error_details':'Start and ending house numbers should be odd when odd_even_both is set to odd'})
-	results = db.custom_query("SELECT feed_id from street_segments WHERE election_id = " + str(election_id) + " AND vip_id = " + str(vip_id) + " AND odd_even_both LIKE 'even' AND (mod(start_house_number,1) = 0 OR mod(end_house_number,1) = 0)"
+	results = db.custom_query("SELECT feed_id from street_segments WHERE election_id = " + str(election_id) + " AND vip_id = " + str(vip_id) + " AND odd_even_both LIKE 'even' AND (mod(start_house_number,1) = 0 OR mod(end_house_number,1) = 0)")
 	for even in results:
 		warning_data.append({'base_element':'street_segment','id':m["feed_id"],'problem_element':'odd_even_both','error_details':'Start and ending house numbers should be even when odd_even_both is set to even'})
 	results = db.custom_query("SELECT s1.feed_id, s1.start_house_number, s1.end_house_number, s1.odd_even_both, s1.precinct_id, s2.feed_id, s2.start_house_number, s2.end_house_number, s2.odd_even_both, s2.precinct_id FROM street_segment s1, street_segment s2 WHERE s1.election_id = " + str(election_id) + " AND s1.vip_id = " + str(vip_id) + " AND s2.election_id = s1.election_id AND s2.vip_id = s1.vip_id AND s1.feed_id != s2.feed_id AND s1.start_house_number BETWEEN s2.start_house_number AND s2.end_house_number AND s1.odd_even_both = s2.odd_even_both AND s1.non_house_address_street_direction IS NOT DISTICT FROM s2.non_house_address_street_direction AND s1.non_house_address_street_suffix IS NOT DISTICT FROM s2.non_house_address_street_suffix AND s1.non_house_address_street_name = s2.non_house_address_street_name AND s1.non_house_address_city = s2.non_house_address_city AND s1.non_house_address_state = s2.non_house_address_state AND s1.non_house_address_zip = s2.non_house_address_zip")
 	
-	er.feed_issues(feed_details, error_data, "error")
-	er.feed_issues(feed_details, warning_data, "warning")
+	if len(error_data) > 0:
+		er.feed_issues(feed_details, error_data, "error")
+	if len(warning_data) > 0:
+		er.feed_issues(feed_details, warning_data, "warning")
 	er.feed_issues(feed_details, duplicate_date, "duplicate")
 
-def convert_to_db_files(feed_details, directory, sp):
+def convert_to_db_files(vip_id, election_id, file_time_stamp, directory, sp):
 
 	feed_ids = {}
 	error_data = []
@@ -206,7 +210,6 @@ def convert_to_db_files(feed_details, directory, sp):
 				out = csv.DictWriter(writer, fieldnames=dict_fields)
 				out.writeheader()
 				row_count = 0
-				processed_count = 0
 				for row in read_data:
 					row_error = False
 					row_count += 1
@@ -221,22 +224,23 @@ def convert_to_db_files(feed_details, directory, sp):
 						if element_name == "source":
 							row["feed_id"] = 1
 						elif element_name == "election":
-							row["feed_id"] = feed_details["election_id"]
+							row["feed_id"] = election_id
 						if row["feed_id"] not in feed_ids:
 							feed_ids[row["feed_id"]] = None
 						else:
 							error_data.append({'base_element':element_name,'error_element':'id','id':row["feed_id"],'error_details':'Element ID is not unique to the feed'})
 							continue
-					row["vip_id"] = feed_details["vip_id"]
-					row["election_id"] = feed_details["election_id"]
+					row["vip_id"] = vip_id
+					row["election_id"] = election_id
 					out.writerow(row)
-					processed_count += 1
-				element_counts[element_name] = {'original':row_count,'processed':processed_count}
+				element_counts[element_name] = str(row_count)
 		os.remove(directory + f)
 		os.rename(directory + element_name + "_db.txt", directory + f)
 		print "finished conversion"
-	er.feed_issues(feed_details, error_data, "error")
-	er.feed_issues(feed_details, warning_data, "warning")
+	if len(error_data) > 0:
+		er.feed_issues(vip_id, file_time_stamp, error_data, "error")
+	if len(warning_data) > 0:
+		er.feed_issues(vip_id, file_time_stamp, warning_data, "warning")
 	return element_counts
 
 def validate(e_name, key, xml_type, row, required):
