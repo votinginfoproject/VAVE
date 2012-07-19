@@ -95,10 +95,10 @@ class EasySQL:
 	def clean_conditions(self, conditions):
 		temp_conditions = {}
 		for k, v in conditions.items():
-			if "condition" in v:
-				temp_conditions[k] = v
-			else:
+			if not isinstance(v, dict):
 				temp_conditions[k] = {'compare_to':v, 'condition':'='}
+			else:
+				temp_conditions[k] = v
 		return temp_conditions
 
 if __name__ == '__main__':
