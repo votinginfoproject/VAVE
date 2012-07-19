@@ -4,6 +4,15 @@ from csv import DictWriter
 
 REPORT_DIRECTORY = "/tmp/reports/"
 
+def report_setup(vip_id=None):
+	dt.create_directory(REPORT_DIRECTORY)
+	if not vip_id:
+		dt.create_directory(REPORT_DIRECTORY+"unknown")
+	else:
+		dt.create_directory(REPORT_DIRECTORY+vip_id)
+		dt.create_directory(REPORT_DIRECTORY+vip_id + "/archives")
+		dt.clear_or_create(REPORT_DIRECTORY+vip_id + "/current")
+
 def report_summary(feed_details, valid_files, invalid_files, invalid_sections):
 	dt.create_directory(REPORT_DIRECTORY)
 	fname = "report_summary_" + feed_details["file_time_stamp"] + ".txt"
@@ -57,10 +66,10 @@ def election_summary(feed_details, writer):
 	writer.write("Election Date: " + str(feed_details["date"]) + "\n")
 	writer.write("Election Type: " + str(feed_details["election_type"]) + "\n\n")
 
-def feed_issues(feed_details, problem_data, issue_type):
-	fname = "feed_" + issue_type + "s_" + feed_details["file_time_stamp"] + ".txt"
-	cur_dir = REPORT_DIRECTORY + str(feed_details["vip_id"]) + "/current/"
-	arc_dir = REPORT_DIRECTORY + str(feed_details["vip_id"]) + "/archives/"
+def feed_issues(vip_id, file_time_stamp, problem_data, issue_type):
+	fname = "feed_" + issue_type + "s_" + file_time_stamp + ".txt"
+	cur_dir = REPORT_DIRECTORY + str(vip_id) + "/current/"
+	arc_dir = REPORT_DIRECTORY + str(vip_id) + "/archives/"
 	with open(cur_dir + fname, "a") as writer:
 		out = DictWriter(writer, fieldnames=problem_data[0].keys())
 		out.writeheader()
