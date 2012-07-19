@@ -28,7 +28,7 @@ TYPE_CONVERSIONS = {	"sqlite":	{"id":"INTEGER PRIMARY KEY AUTOINCREMENT", "xml_s
 					"date_modified": "DEFAULT CURRENT_TIMESTAMP"}} 
 
 SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
-META_QUERIES = ["CREATE TABLE meta_elections (id {id}, vip_id {int}, election_date {timestamp}, election_type {xml_string}, election_id {int})", "CREATE TABLE meta_file_data (vip_id {int}, election_id {int}, file_name {xml_string}, hash {xml_string})", "CREATE TABLE meta_feed_data (vip_id {int}, election_id {int}, element {xml_string}, original_count {int}, final_count {int})"]
+META_QUERIES = ["CREATE TABLE meta_elections (id {id}, vip_id {int}, election_date {timestamp}, election_type {xml_string}, election_id {int})", "CREATE TABLE meta_file_data (vip_id {int}, election_id {int}, file_name {xml_string}, hash {xml_string})", "CREATE TABLE meta_feed_data (vip_id {int}, election_id {int}, element {xml_string}, element_count {int})"]
 
 #default settings
 db_type = "sqlite"
