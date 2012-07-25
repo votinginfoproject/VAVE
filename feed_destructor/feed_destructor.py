@@ -30,6 +30,7 @@ EMAIL_REGEX = re.compile("[a-zA-Z0-9+_\-\.]+@[0-9a-zA-Z][.-0-9a-zA-Z]*.[a-zA-Z]"
 URL_REGEX = re.compile("http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))")
 PHONE_REGEX = re.compile("1?\s*\W?\s*([2-9][0-8][0-9])\s*\W?\s*([2-9][0-9]{2})\s*\W?\s*([0-9]{4})(\se?x?t?(\d*))?")
 VALID_DIRECTIONS = ['n','s','e','w','nw','ne','sw','se','north','south','east','west','northeast','northwest','southeast','southwest']
+PARTITION_TABLES = ["street_segment"]
 
 def main():
 
@@ -119,6 +120,13 @@ def get_election_id(feed_details, db):
 		feed_details["election_id"] = str(new_id)
 		print feed_details
 		db.insert(table_list[0],[feed_details])
+		results = db.select(table_list,["vip_id", "election_id"])
+		trigger_text = "RETURNS trigger AS $body$ BEGIN IF"
+		for r in results:
+			trigger_test += "(NEW.VIP_ID = {1} AND NEW.ELECTION_ID = {2}) THEN INSERT INTO {0}_{1}_{2} VALUES (NEW.*); ELSEIF".format("{0}", feed_details["vip_id"], feed_details["election_id"])
+		trigger_test = trigger_test[:-2] + " RAISE EXCEPTION 'No {0} table for vip/election id combo'; END IF; RETURN NULL; END; $BODY$ LANGUAGE plpgsql;"
+		for t in PARTITION_TABLES:
+			db.custom_query(trigger_test.format(t))
 	else:
 		return str(result["election_id"])
 	return str(feed_details["election_id"])
