@@ -29,6 +29,7 @@ TYPE_CONVERSIONS = {	"sqlite":	{"id":"INTEGER PRIMARY KEY AUTOINCREMENT", "xml_s
 
 SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
 META_QUERIES = ["CREATE TABLE meta_elections (id {id}, vip_id {int}, election_date {timestamp}, election_type {xml_string}, election_id {int})", "CREATE TABLE meta_file_data (vip_id {int}, election_id {int}, file_name {xml_string}, hash {xml_string})", "CREATE TABLE meta_feed_data (vip_id {int}, election_id {int}, element {xml_string}, element_count {int})"]
+PARTITION_TABLES = ["street_segment"]
 
 #default settings
 db_type = "sqlite"
@@ -140,9 +141,10 @@ def create_table(name, elements):
 
 def create_triggers():
 	if db_type == "postgres":
-		create_trigger = "CREATE OR REPLACE FUNCTION update_last_modified() RETURNS TRIGGER AS $$ BEGIN NEW.lastmodified = NOW(); RETURN NEW; END; $$ LANGUAGE 'plpgsql'";
+		create_trigger = "CREATE OR REPLACE FUNCTION update_last_modified() RETURNS TRIGGER AS $$ BEGIN NEW.lastmodified = NOW(); RETURN NEW; END; $$ LANGUAGE plpgsql;";
 		cursor.execute(create_trigger)
 		connection.commit()
+		#TODO:Actually write the trigger itself
 	elif db_type == "sqlite":
 		trigger_count = 0
 		cursor.execute("SELECT * FROM sqlite_master WHERE type='table'")
@@ -156,7 +158,16 @@ def create_triggers():
 			create_trigger = "CREATE TRIGGER update_last_modified{0} AFTER INSERT ON {1} BEGIN UPDATE {1} SET last_modified = datetime('now') WHERE id = new.{1}; END;".format(trigger_count, table)
 			cursor.execute(create_trigger)
 			connection.commit()
-			trigger_count += 1;
+			trigger_count += 1
+
+def create_partition_triggers():
+	for table in PARTITION_TABLES:
+		trigger_function = "CREATE OR REPLACE FUNCTION " + table + "_by_vip_election_ids() RETURNS TRIGGER AS $BODY$ BEGIN INSERT INTO " + table + " VALUES (NEW.*); RETURN NULL; END; $BODY$ LANGUAGE plpgsql;"
+		cursor.execute(trigger_function)
+		connection.commit()
+		create_trigger = "CREATE TRIGGER insert_" + table + "_trigger BEFORE INSERT ON " + table + " FOR EACH ROW EXECUTE PROCEDURE " + table + "_by_vip_election_ids();"
+		cursor.execute(create_trigger)
+		connection.commit()
 
 parameters = get_parsed_args()
 
@@ -201,3 +212,5 @@ for q in META_QUERIES:
 
 if db_type == "postgres" or db_type == "sqlite":
 	create_triggers()
+if db_type == "postgres":
+	create_partition_triggers()
