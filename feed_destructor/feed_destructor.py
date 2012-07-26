@@ -23,7 +23,7 @@ DEFAULT_ELECT_ID = 1000
 SCHEMA_URL = "https://github.com/votinginfoproject/vip-specification/raw/master/vip_spec_v3.0.xsd"
 REQUIRED_FILES = ["source.txt", "election.txt"]
 process_time = str(datetime.now())
-file_time_stamp = process_time[:process_time.rfind(".")].replace(":","-").replace(" ","_")
+file_timestamp = process_time[:process_time.rfind(".")].replace(":","-").replace(" ","_")
 LOCALITY_TYPES = ['county','city','town','township','borough','parish','village','region']
 ZIPCODE_REGEX = re.compile("\d{5}(?:[-\s]\d{4})?")
 EMAIL_REGEX = re.compile("[a-zA-Z0-9+_\-\.]+@[0-9a-zA-Z][.-0-9a-zA-Z]*.[a-zA-Z]")
@@ -54,53 +54,57 @@ def main():
 	print "done unpacking and flattening"
 
 	sp = SchemaProps(SCHEMA_URL)
-	file_details = {"file":unpack_file, "process_time":process_time, "file_time_stamp":file_time_stamp}
-	invalid_sections = []
-	invalid_files = []
-	valid_files = []
+	file_details = {"file":unpack_file, "process_time":process_time, "file_timestamp":file_timestamp}
+	election_details = {}
+	vip_id = None
+	election_id = None
 
 	print "converting to db style flat files...."
 
 	if dt.file_by_name(CONFIG_FILE, DIRECTORIES["temp"]):
-		invalid_sections = process_config(DIRECTORIES["temp"], DIRECTORIES["temp"] + CONFIG_FILE, sp)
+		file_details.update(process_config(DIRECTORIES["temp"], DIRECTORIES["temp"] + CONFIG_FILE, sp))
 	if dt.files_by_extension(".txt", DIRECTORIES["temp"]) > 0:
-		invalid_files, valid_files = process_flatfiles(DIRECTORIES["temp"], sp)
+		file_details.update(process_flatfiles(DIRECTORIES["temp"], sp))
 	print "processing xml files..."
 	xml_files = dt.files_by_extension(".xml", DIRECTORIES["temp"])
 	if len(xml_files) >= 1:
 		ftff.feed_to_db_files(DIRECTORIES["temp"], xml_files[0], sp.full_header_data("db"), sp.version)
 		os.remove(xml_files[0])
-		valid_files.append(xml_files[0])
+		if "valid_files" in file_details:
+			file_details["valid_files"].append(xml_files[0])
+		else:
+			file_details["valid_files"] = [xml_files[0]]
 
 	print "done processing xml files"
 
 	print "getting feed details..."
 	db = EasySQL("localhost","vip","username","password")
-	feed_details = {}
 	try:
 		with open(DIRECTORIES["temp"] + "source.txt", "r") as f:
 			reader = csv.DictReader(f)
 			row = reader.next()
-			feed_details["vip_id"] = row["vip_id"]
+			vip_id = row["vip_id"]
+			election_details["vip_id"] = vip_id
 		with open(DIRECTORIES["temp"] + "election.txt", "r") as f:
 			reader = csv.DictReader(f)
 			row = reader.next()
-			feed_details["election_date"] = row["date"]
-			feed_details["election_type"] = row["election_type"]
+			election_details["election_date"] = row["date"]
+			election_details["election_type"] = row["election_type"]
 	except:
-		er.report_summary(feed_details, file_details, valid_files, invalid_files, invalid_sections)
+		er.report_summary(vip_id, election_id, file_details, election_details)
 		return
-	er.report_setup(feed_details["vip_id"])
+	er.report_setup(vip_id)
 
-	election_id = get_election_id(feed_details, db)
+	election_id = get_election_id(election_details, db)
+	election_details["election_id"] = election_id
 	print "done getting feed details"
 
 	print "converting to full db files...."
-	element_counts = convert_to_db_files(feed_details["vip_id"], election_id, file_time_stamp, DIRECTORIES["temp"], sp)
+	element_counts = convert_to_db_files(vip_id, election_id, file_details["file_timestamp"], DIRECTORIES["temp"], sp)
 
 	print "done converting to full db files"
 
-	update_data(feed_details["vip_id"], election_id, db, element_counts, DIRECTORIES["temp"], DIRECTORIES["archives"])	
+	update_data(vip_id, election_id, db, element_counts, DIRECTORIES["temp"], DIRECTORIES["archives"])	
 
 	er.e_count_summary(feed_details, element_counts)
 
@@ -108,28 +112,28 @@ def main():
 
 	generate_feed(feed_details)
 
-def get_election_id(feed_details, db):
+def get_election_id(election_details, db):
 	table_list = ['meta_elections']
-	result = db.select(table_list,['election_id'],feed_details,1)
+	result = db.select(table_list,['election_id'],election_details,1)
 	if not result:
 		last_id = db.select(table_list,['GREATEST(election_id)'],None,1)
 		if not last_id:
 			new_id = DEFAULT_ELECT_ID
 		else:
 			new_id = int(last_id["greatest"]) + 1
-		feed_details["election_id"] = str(new_id)
-		print feed_details
-		db.insert(table_list[0],[feed_details])
+		election_id = str(new_id)
+		election_details["election_id"] = election_id
+		db.insert(table_list[0],[election_details])
 		results = db.select(table_list,["vip_id", "election_id"])
 		trigger_text = "RETURNS trigger AS $body$ BEGIN IF"
 		for r in results:
-			trigger_test += "(NEW.VIP_ID = {1} AND NEW.ELECTION_ID = {2}) THEN INSERT INTO {0}_{1}_{2} VALUES (NEW.*); ELSEIF".format("{0}", feed_details["vip_id"], feed_details["election_id"])
+			trigger_test += "(NEW.VIP_ID = {1} AND NEW.ELECTION_ID = {2}) THEN INSERT INTO {0}_{1}_{2} VALUES (NEW.*); ELSEIF".format("{0}", election_details["vip_id"], election_id)
 		trigger_test = trigger_test[:-2] + " RAISE EXCEPTION 'No {0} table for vip/election id combo'; END IF; RETURN NULL; END; $BODY$ LANGUAGE plpgsql;"
 		for t in PARTITION_TABLES:
 			db.custom_query(trigger_test.format(t))
 	else:
-		return str(result["election_id"])
-	return str(feed_details["election_id"])
+		return result["election_id"] 
+	return election_id
 
 def update_data(vip_id, election_id, db, element_counts, directory, archives):
 
@@ -346,7 +350,9 @@ def process_config(directory, config_file, sp):
 				os.remove(directory + fname)
 			os.rename(directory + s + "_temp.txt", directory + fname)
 	os.remove(config_file)
-	return invalid_sections
+	if len(invalid_sections) == 0:
+		return None
+	return {"invalid_sections":invalid_sections}
 
 #similar to directory tools search except this returns a file/element dict
 #and uses listdir on a flattened folder instead of the slower os.walk
@@ -377,6 +383,10 @@ def process_flatfiles(directory, sp):
 	
 	if db_or_element == "db":
 		invalid_files = fc.invalid_files(directory, file_list, sp.full_header_data("db"))
+		valid_files = []
+		for k, v in file_list.iteritems():
+			if k not in invalid_files:
+				valid_files.append(k)
 	elif db_or_element == "element":
 		invalid_files = fc.invalid_files(directory, file_list, sp.full_header_data("element"))
 		for k, v in file_list.iteritems():
@@ -388,7 +398,7 @@ def process_flatfiles(directory, sp):
 	for f in invalid_files:
 		os.remove(directory + f)
 
-	return invalid_files
+	return {"invalid_files":invalid_files, "valid_files":valid_files}
 
 #converts data from element format to db format. Currently opens and reads
 #through the whole file each time, splitting on each row was significantly slower
