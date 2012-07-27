@@ -125,12 +125,16 @@ def get_election_id(election_details, db):
 		election_details["election_id"] = election_id
 		db.insert(table_list[0],[election_details])
 		results = db.select(table_list,["vip_id", "election_id"])
-		trigger_text = "RETURNS trigger AS $body$ BEGIN IF"
+		create_table = "CREATE TABLE {0}_{1}_{2} (PRIMARY KEY(vip_id, election_id, feed_id), CHECK(vip_id={1} AND election_id ={2})) INHERITS({0});"
+		trigger_text = "CREATE OR REPLACE FUNCTION {0}_by_vip_election_ids()\n RETURNS trigger AS $body$ \nBEGIN\n IF"
 		for r in results:
-			trigger_test += "(NEW.VIP_ID = {1} AND NEW.ELECTION_ID = {2}) THEN INSERT INTO {0}_{1}_{2} VALUES (NEW.*); ELSEIF".format("{0}", election_details["vip_id"], election_id)
-		trigger_test = trigger_test[:-2] + " RAISE EXCEPTION 'No {0} table for vip/election id combo'; END IF; RETURN NULL; END; $BODY$ LANGUAGE plpgsql;"
+			trigger_text += "(NEW.VIP_ID = {1} AND NEW.ELECTION_ID = {2}) THEN \nINSERT INTO {0}_{1}_{2} VALUES (NEW.*);\n ELSEIF"		
+		trigger_text = trigger_text[:-2] + "\n RAISE EXCEPTION 'No {0} table for vip/election id combo';\n END IF;\n RETURN NULL;\n END;\n $body$\n LANGUAGE plpgsql;"
+		print create_table
+		print trigger_text
 		for t in PARTITION_TABLES:
-			db.custom_query(trigger_test.format(t))
+			db.custom_query(create_table.format(t, election_details["vip_id"], election_id))
+			db.custom_query(trigger_text.format(t, election_details["vip_id"], election_id))
 	else:
 		return result["election_id"] 
 	return election_id
@@ -150,14 +154,14 @@ def update_data(vip_id, election_id, db, element_counts, directory, archives):
 			db.copy_upload(v, r.fieldnames, full_path)
 			db.insert('meta_file_data',[{'file_name':k,'vip_id':vip_id,'election_id':election_id,'hash':new_hash}])
 			db.insert('meta_feed_data',[{'element':v,'vip_id':vip_id,'election_id':election_id,'element_count':element_counts[v]}])
-			os.rename(full_path,archives+v+"_"+file_time_stamp+".txt")
+			os.rename(full_path,archives+v+"_"+file_timestamp+".txt")
 		elif new_hash != hash_val:
 			db.delete(v,{'vip_id':vip_id,'election_id':election_id})
 			r = csv.DictReader(open(full_path, "r"))
 			db.copy_upload(e_name, r.fieldnames, full_path)
 			db.update('meta_file_data',{'hash':new_hash},{'file_name':k,'vip_id':vip_id,'election_id':election_id})
 			db.update('meta_feed_data',{'element_count':element_count},{'element':v,'vip_id':vip_id,'election_id':election_id})
-			os.rename(full_path,archives+v+"_"+file_time_stamp+".txt")
+			os.rename(full_path,archives+v+"_"+file_timestamp+".txt")
 
 def db_validations(vip_id, election_id, db, feed_details, sp):
 	table_columns = sp.full_header_data("db")
@@ -249,6 +253,7 @@ def convert_to_db_files(vip_id, election_id, file_time_stamp, directory, sp):
 		os.remove(directory + f)
 		os.rename(directory + element_name + "_db.txt", directory + f)
 		print "finished conversion"
+	#TODO:These should be returned and then handled from the base process
 	if len(error_data) > 0:
 		er.feed_issues(vip_id, file_time_stamp, error_data, "error")
 	if len(warning_data) > 0:
