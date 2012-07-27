@@ -104,7 +104,7 @@ def main():
 
 	print "done converting to full db files"
 
-	update_data(vip_id, election_id, db, element_counts, DIRECTORIES["temp"], DIRECTORIES["archives"])	
+	update_data(vip_id, election_id, file_details["file_timestamp"], db, element_counts, DIRECTORIES["temp"], DIRECTORIES["archives"])	
 
 	er.e_count_summary(feed_details, element_counts)
 
@@ -130,16 +130,14 @@ def get_election_id(election_details, db):
 		for r in results:
 			trigger_text += "(NEW.VIP_ID = {1} AND NEW.ELECTION_ID = {2}) THEN \nINSERT INTO {0}_{1}_{2} VALUES (NEW.*);\n ELSEIF"		
 		trigger_text = trigger_text[:-2] + "\n RAISE EXCEPTION 'No {0} table for vip/election id combo';\n END IF;\n RETURN NULL;\n END;\n $body$\n LANGUAGE plpgsql;"
-		print create_table
-		print trigger_text
 		for t in PARTITION_TABLES:
 			db.custom_query(create_table.format(t, election_details["vip_id"], election_id))
 			db.custom_query(trigger_text.format(t, election_details["vip_id"], election_id))
 	else:
-		return result["election_id"] 
+		return str(result["election_id"])
 	return election_id
 
-def update_data(vip_id, election_id, db, element_counts, directory, archives):
+def update_data(vip_id, election_id, file_timestamp, db, element_counts, directory, archives):
 
 	file_list = files_ename_by_extension(directory, "txt")
 	for k, v in file_list.iteritems():
@@ -151,14 +149,20 @@ def update_data(vip_id, election_id, db, element_counts, directory, archives):
 		new_hash = file_hash(full_path)
 		if not hash_val:
 			r = csv.DictReader(open(full_path, "r"))
-			db.copy_upload(v, r.fieldnames, full_path)
+			if v in PARTITION_TABLES:
+				db.copy_upload(v + "_" + vip_id + "_" + election_id, r.fieldnames, full_path)
+			else:
+				db.copy_upload(v, r.fieldnames, full_path)
 			db.insert('meta_file_data',[{'file_name':k,'vip_id':vip_id,'election_id':election_id,'hash':new_hash}])
 			db.insert('meta_feed_data',[{'element':v,'vip_id':vip_id,'election_id':election_id,'element_count':element_counts[v]}])
 			os.rename(full_path,archives+v+"_"+file_timestamp+".txt")
 		elif new_hash != hash_val:
 			db.delete(v,{'vip_id':vip_id,'election_id':election_id})
 			r = csv.DictReader(open(full_path, "r"))
-			db.copy_upload(e_name, r.fieldnames, full_path)
+			if v in PARTITION_TABLES:
+				db.copy_upload(v + "_" + vip_id + "_" + election_id, r.fieldnames, full_path)
+			else:
+				db.copy_upload(v, r.fieldnames, full_path)
 			db.update('meta_file_data',{'hash':new_hash},{'file_name':k,'vip_id':vip_id,'election_id':election_id})
 			db.update('meta_feed_data',{'element_count':element_count},{'element':v,'vip_id':vip_id,'election_id':election_id})
 			os.rename(full_path,archives+v+"_"+file_timestamp+".txt")
