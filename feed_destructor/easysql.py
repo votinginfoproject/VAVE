@@ -90,7 +90,8 @@ class EasySQL:
 	def custom_query(self, query):
 		self.cursor.execute(query)
 		self.conn.commit()
-		return self.cursor.fetchall()
+		if query.lower().startswith("select"):
+			return self.cursor.fetchall()
 
 	def clean_conditions(self, conditions):
 		temp_conditions = {}
