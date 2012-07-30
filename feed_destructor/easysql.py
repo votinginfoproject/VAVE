@@ -16,7 +16,7 @@ class EasySQL:
 			query += ','.join(vals)
 		query += " FROM " + table
 		if conditions:
-			query += " WHERE " + ' AND '.join(["{0} {1} '{2}'".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in conditions])
+			query += " WHERE " + ' AND '.join(["{0} {1} {2}".format(k,conditions[k]['condition'],conditions[k]['compare_to']) for k in conditions])
 		return query
 	
 	def select(self, tables, vals=None, conditions=None, result_count=None):
@@ -25,7 +25,6 @@ class EasySQL:
 			conditions = self.clean_conditions(conditions)
 		if len(tables) == 1:#also need to check conditions for special values ie 'not in'
 			query = self.simple_select(tables[0], vals, conditions)
-
 		self.cursor.execute(query)
 
 		if not result_count:
@@ -37,8 +36,8 @@ class EasySQL:
 
 	def leftjoin(self, base_table, base_vals, base_conditions, join_table, join_vals, join_conditions, join_comparisons):
 		query = "SELECT t1." + ",t1.".join(base_vals) + ",t2." + ",t2.".join(join_vals)
-		query += " FROM " + base_table + " AS t1 "
-		query += " JOIN " + join_table + " AS t2 ON ("
+		query += " FROM " + base_table + " t1 "
+		query += " JOIN " + join_table + " t2 ON ("
 		query += ' AND '.join(["t1.{0} {1} t2.{0}".format(k,v) for k,v in join_comparisons.items()]) + ")"
 		if len(base_conditions) > 0 and len(join_conditions) > 0:
 			query += ' WHERE ' + ' AND '.join(["t1.{0} {1} '{2}'".format(k,base_conditions[k]['condition'],base_conditions[k]['compare_to']) for k in base_conditions])
