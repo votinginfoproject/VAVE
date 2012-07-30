@@ -3,6 +3,23 @@ from shutil import copyfile
 from csv import DictWriter
 
 REPORT_DIRECTORY = "/tmp/reports/"
+ERROR_CODES = {"missing_required":"Missing required field",
+		"non_integer":"Invalid integer given",
+		"invalid_string":"String values must be valid ASCII and XML types",
+		"non_iso_date":"Dates must be valid ISO dates",
+		"non_iso_datetime":"DateTimes must be valid ISO dateTimes",
+		"invalid_yesnoenum":"Must be either 'yes' or 'no'",
+		"invalid_oebenum":"Must be 'odd', 'even', or 'both'",
+		"invalid_locality":"Locality type must be valid VIP locality type",
+		"invalid_street_dir":"Street directions must be valid"}
+WARNING_CODES = {"invalid_zip":"Invalid Zip Code",
+		"invalid_email":"Invalid E-mail",
+		"invalid_url":"Invalid URL",
+		"invalid_phone":"Invalid phone number",
+		"invalid_state_abbrev":"State must be a valid 2-letter abbreviation",
+		"invalid_hour_range":"Hour values must include a range",
+		"invalid_end_house":"Ending house number must be greater than zero",
+		"invalid_end_apartment":"Ending apartment number must be greater than zero"}
 
 def report_setup(vip_id=None):
 	dt.create_directory(REPORT_DIRECTORY)
@@ -13,7 +30,7 @@ def report_setup(vip_id=None):
 		dt.create_directory(REPORT_DIRECTORY+vip_id + "/archives")
 		dt.clear_or_create(REPORT_DIRECTORY+vip_id + "/current")
 
-def report_summary(vip_id, election_id, file_details, election_details):
+def report_summary(vip_id, election_id, file_details, election_details, element_counts=None):
 	dt.create_directory(REPORT_DIRECTORY)
 	fname = "report_summary_" + file_details["file_timestamp"] + ".txt"
 
@@ -38,6 +55,10 @@ def report_summary(vip_id, election_id, file_details, election_details):
 			else:
 				election_summary(election_details, w)
 				file_summary(file_details, w)
+			if element_counts:
+				writer.write("----------------------\nElement Counts\n----------------------\n\n")
+				for k, v in element_counts.iteritems():
+					writer.write(k + ":" + v + "\n")
 		copyfile(directory + "current/" + fname, directory + "archives/" + fname)
 
 def summary_header(file_details, writer):
@@ -76,15 +97,3 @@ def feed_issues(vip_id, file_timestamp, problem_data, issue_type):
 		for row in problem_data:
 			out.writerow(row)
 	copyfile(cur_dir + fname, arc_dir + fname)
-
-def e_count_summary(feed_details, element_counts):
-	fname = "report_summary_" + feed_details["file_time_stamp"] + ".txt"
-
-	directory = REPORT_DIRECTORY + str(feed_details["vip_id"]) + "/"
-	with open(directory + "current/" + fname, "a") as w:
-		writer.write("----------------------\nElement Counts\n----------------------\n\n")
-		for elem in element_counts:
-			writer.write(elem + "\n")
-			writer.write("\t- original:" + str(element_counts[elem]['original'])+"\n")
-			writer.write("\t- processed:" + str(element_counts[elem]['processed']) + "\n")
-	copyfile(directory + "current/" + fname, directory + "archives/" + fname)	
