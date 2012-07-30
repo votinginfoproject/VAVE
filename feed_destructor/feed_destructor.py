@@ -103,6 +103,10 @@ def main():
 	print "done converting to full db files"
 	
 	er.report_summary(vip_id, election_id, file_details, election_details, element_counts)
+	if len(error_data) > 0:
+		er.feed_issues(vip_id, file_details["file_timestamp"], error_data, "error")
+	if len(warning_data) > 0:
+		er.feed_issues(vip_id, file_details["file_timestamp"], warning_data, "warning")
 
 	update_data(vip_id, election_id, file_details["file_timestamp"], db, element_counts, DIRECTORIES["temp"], DIRECTORIES["archives"])	
 
@@ -240,7 +244,7 @@ def convert_to_db_files(vip_id, election_id, file_time_stamp, directory, sp):
 							report["id"] = row["id"]
 						else:
 							report["id"] = "xxx"
-						if "error_code" in report
+						if "error_code" in report:
 							error_data.append(report)
 						else:
 							warning_data.append(report)
@@ -253,7 +257,7 @@ def convert_to_db_files(vip_id, election_id, file_time_stamp, directory, sp):
 					if row["feed_id"] not in feed_ids:
 						feed_ids[row["feed_id"]] = None
 					else:
-						error_data.append({'base_element':element_name,'error_element':'id','id':row["feed_id"],'error_details':'Element ID is not unique to the feed'})
+						error_data.append({'base_element':element_name,'problem_element':'id','id':row["feed_id"],'error_code':'duplicate_ids'})
 						continue
 				row["vip_id"] = vip_id
 				row["election_id"] = election_id
