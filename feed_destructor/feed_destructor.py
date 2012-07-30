@@ -216,7 +216,7 @@ def convert_to_db_files(vip_id, election_id, file_time_stamp, directory, sp):
 	element_counts = {}
 	for f in os.listdir(directory):
 		element_name, extension = f.lower().split(".")
-		with open(directory + f, "r"), open(directory + element_name + "_db.txt", "w") as reader, writer:
+		with open(directory + f, "r") as reader, open(directory + element_name + "_db.txt", "w") as writer:
 			print "reading " + directory + f
 			read_data = csv.DictReader(reader)
 			
@@ -239,7 +239,7 @@ def convert_to_db_files(vip_id, election_id, file_time_stamp, directory, sp):
 					report = validate(k, type_vals[k]["type"], row, type_vals[k]["is_required"])
 					if report is not None:
 						report["base_element"] = element_name
-						report["problem_element"] = key 
+						report["problem_element"] = k 
 						if "id" in row:
 							report["id"] = row["id"]
 						else:

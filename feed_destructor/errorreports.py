@@ -56,9 +56,9 @@ def report_summary(vip_id, election_id, file_details, election_details, element_
 				election_summary(election_details, w)
 				file_summary(file_details, w)
 			if element_counts:
-				writer.write("----------------------\nElement Counts\n----------------------\n\n")
+				w.write("----------------------\nElement Counts\n----------------------\n\n")
 				for k, v in element_counts.iteritems():
-					writer.write(k + ":" + v + "\n")
+					w.write(k + ":" + v + "\n")
 		copyfile(directory + "current/" + fname, directory + "archives/" + fname)
 
 def summary_header(file_details, writer):
@@ -84,7 +84,7 @@ def source_summary(vip_id, feed_details, writer):
 def election_summary(election_details, writer):
 	writer.write("----------------------\nElection Data\n----------------------\n\n")
 	writer.write("Election ID: " + str(election_details["election_id"]) + "\n")
-	writer.write("Election Date: " + str(election_details["date"]) + "\n")
+	writer.write("Election Date: " + str(election_details["election_date"]) + "\n")
 	writer.write("Election Type: " + str(election_details["election_type"]) + "\n\n")
 
 def feed_issues(vip_id, file_timestamp, problem_data, issue_type):
