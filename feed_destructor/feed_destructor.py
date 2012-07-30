@@ -110,9 +110,9 @@ def main():
 
 	update_data(vip_id, election_id, file_details["file_timestamp"], db, element_counts, DIRECTORIES["temp"], DIRECTORIES["archives"])	
 
-	db_validations(feed_details, sp)
+	db_validations(vip_id, election_id, db, sp)
 
-	generate_feed(feed_details)
+	generate_feed(file_details)
 
 def get_election_id(election_details, db):
 	table_list = ['meta_elections']
@@ -169,45 +169,47 @@ def update_data(vip_id, election_id, file_timestamp, db, element_counts, directo
 			db.update('meta_feed_data',{'element_count':element_count},{'element':v,'vip_id':vip_id,'election_id':election_id})
 			os.rename(full_path,archives+v+"_"+file_timestamp+".txt")
 
-def db_validations(vip_id, election_id, db, feed_details, sp):
+def db_validations(vip_id, election_id, db, sp):
 	table_columns = sp.full_header_data("db")
-	tables = header_data.keys()
+	base_tables = sp.key_list("element")
+	tables = table_columns.keys()
 	duplicate_data = []
 	error_data = []
 	warning_data = []
 	for t in tables:
 		if t == "street_segment":
 			continue
+		if t.endswith("result"):
+			continue
 		base_conditions = {'election_id':{'condition':'=','compare_to':election_id},'vip_id':{'condition':'=','compare_to':vip_id}}
+		join_comparisons = {}
 		for column in table_columns[t]:
 			if column != "id":
 				join_comparisons[column] = '='
-		results = db.leftjoin(t, ['feed_id AS "id"'], base_conditions, t, ['feed_id AS "duplicate_id"'], {}, join_comparisons)
-		for d in results:
-			duplicate_data.append({"element_name":t,"id":d['id'],"duplicate_id":d['duplicate_id']})
+		if t in base_tables: #if t is not part of the base tables we should have taken care of the deduping ourselves
+			results = db.leftjoin(t, ['feed_id AS "id"'], base_conditions, t, ['feed_id AS "duplicate_id"'], {}, join_comparisons)
+			for d in results:
+				duplicate_data.append({"element_name":t,"id":d['id'],"duplicate_id":d['duplicate_id']})
 		for column in table_columns[t]:
 			if column.endswith("_id") and column[:-3] in tables:
-				results = db.custom_query("SELECT " + column + ", feed_id FROM " + t + " WHERE election_id = " + str(election_id) + " AND vip_id = " + str(vip_id) + " AND " + column + " NOT IN (SELECT feed_id FROM " + column[:-3] + " WHERE vip_id = " + str(vip_id) + " AND election_id = " + str(election_id))
+				results = db.custom_query("SELECT " + column + " FROM " + t + " WHERE election_id = " + str(election_id) + " AND vip_id = " + str(vip_id) + " AND " + column + " IS NOT NULL AND " + column + " NOT IN (SELECT feed_id FROM " + column[:-3] + " WHERE vip_id = " + str(vip_id) + " AND election_id = " + str(election_id) +")")
+				print results
 				for m in results:
-					error_data.append({'base_element':t,'problem_element':column,'id':m["feed_id"],'error_details':'Missing element mapping, ' + column + ' with id of ' + m[column] + ' does not exist'})
+					error_data.append({'base_element':t,'problem_element':column,'id':m[column], 'error_code':'orphaned_object'})
 	
-	bad_house_numbers = db.select(['street_segments'],['feed_id'],{'election_id':election_id,'vip_id':vip_id,'start_house_number':{'condition':'>','compare_to':'end_house_number'}})
+	bad_house_numbers = db.select(['street_segment'],['feed_id'],{'election_id':election_id,'vip_id':vip_id,'start_house_number':{'condition':'>','compare_to':'end_house_number'}})
 	for house in bad_house_numbers:
-		error_data.append({'base_element':'street_segment','id':m["feed_id"],'problem_element':'start-end_house_number','error_details':'Starting house numbers must be less than ending house numbers'})
-	results = db.custom_query("SELECT feed_id from street_segments WHERE election_id = " + str(election_id) + " AND vip_id = " + str(vip_id) + " AND odd_even_both LIKE 'odd' AND (mod(start_house_number,2) = 0 OR mod(end_house_number,2) = 0)")
+		error_data.append({'base_element':'street_segment','id':m["feed_id"],'problem_element':'start-end_house_number','error_code':'invalid_house_range'})
+	results = db.custom_query("SELECT feed_id from street_segment WHERE election_id = " + str(election_id) + " AND vip_id = " + str(vip_id) + " AND odd_even_both = 'odd' AND (mod(start_house_number,2) = 0 OR mod(end_house_number,2) = 0)")
 	for odd in results:
-		warning_data.append({'base_element':'street_segment','id':m["feed_id"],'problem_element':'odd_even_both','error_details':'Start and ending house numbers should be odd when odd_even_both is set to odd'})
-	results = db.custom_query("SELECT feed_id from street_segments WHERE election_id = " + str(election_id) + " AND vip_id = " + str(vip_id) + " AND odd_even_both LIKE 'even' AND (mod(start_house_number,1) = 0 OR mod(end_house_number,1) = 0)")
+		warning_data.append({'base_element':'street_segment','id':m["feed_id"],'problem_element':'odd_even_both','warning_code':'unmatching_oebenum'})
+	results = db.custom_query("SELECT feed_id from street_segment WHERE election_id = " + str(election_id) + " AND vip_id = " + str(vip_id) + " AND odd_even_both = 'even' AND (mod(start_house_number,1) = 0 OR mod(end_house_number,1) = 0)")
 	for even in results:
-		warning_data.append({'base_element':'street_segment','id':m["feed_id"],'problem_element':'odd_even_both','error_details':'Start and ending house numbers should be even when odd_even_both is set to even'})
-	results = db.custom_query("SELECT s1.feed_id, s1.start_house_number, s1.end_house_number, s1.odd_even_both, s1.precinct_id, s2.feed_id, s2.start_house_number, s2.end_house_number, s2.odd_even_both, s2.precinct_id FROM street_segment s1, street_segment s2 WHERE s1.election_id = " + str(election_id) + " AND s1.vip_id = " + str(vip_id) + " AND s2.election_id = s1.election_id AND s2.vip_id = s1.vip_id AND s1.feed_id != s2.feed_id AND s1.start_house_number BETWEEN s2.start_house_number AND s2.end_house_number AND s1.odd_even_both = s2.odd_even_both AND s1.non_house_address_street_direction IS NOT DISTICT FROM s2.non_house_address_street_direction AND s1.non_house_address_street_suffix IS NOT DISTICT FROM s2.non_house_address_street_suffix AND s1.non_house_address_street_name = s2.non_house_address_street_name AND s1.non_house_address_city = s2.non_house_address_city AND s1.non_house_address_state = s2.non_house_address_state AND s1.non_house_address_zip = s2.non_house_address_zip")
-	
-	if len(error_data) > 0:
-		er.feed_issues(feed_details, error_data, "error")
-	if len(warning_data) > 0:
-		er.feed_issues(feed_details, warning_data, "warning")
-	er.feed_issues(feed_details, duplicate_date, "duplicate")
+		warning_data.append({'base_element':'street_segment','id':m["feed_id"],'problem_element':'odd_even_both','warning_code':'unmatching_oebenum'})
+	results = db.custom_query("SELECT s1.feed_id, s1.start_house_number, s1.end_house_number, s1.odd_even_both, s1.precinct_id, s2.feed_id, s2.start_house_number, s2.end_house_number, s2.odd_even_both, s2.precinct_id FROM street_segment s1, street_segment s2 WHERE s1.election_id = " + str(election_id) + " AND s1.vip_id = " + str(vip_id) + " AND s2.election_id = s1.election_id AND s2.vip_id = s1.vip_id AND s1.feed_id != s2.feed_id AND s1.start_house_number BETWEEN s2.start_house_number AND s2.end_house_number AND s1.odd_even_both = s2.odd_even_both AND s1.non_house_address_street_direction IS NOT DISTINCT FROM s2.non_house_address_street_direction AND s1.non_house_address_street_suffix IS NOT DISTINCT FROM s2.non_house_address_street_suffix AND s1.non_house_address_street_name = s2.non_house_address_street_name AND s1.non_house_address_city = s2.non_house_address_city AND s1.non_house_address_state = s2.non_house_address_state AND s1.non_house_address_zip = s2.non_house_address_zip")
 
+	print results
+	
 def convert_to_db_files(vip_id, election_id, file_time_stamp, directory, sp):
 
 	feed_ids = {}
