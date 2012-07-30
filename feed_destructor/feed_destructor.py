@@ -93,20 +93,18 @@ def main():
 	except:
 		er.report_summary(vip_id, election_id, file_details, election_details)
 		return
-	er.report_setup(vip_id)
 
 	election_id = get_election_id(election_details, db)
 	election_details["election_id"] = election_id
 	print "done getting feed details"
 
 	print "converting to full db files...."
-	element_counts = convert_to_db_files(vip_id, election_id, file_details["file_timestamp"], DIRECTORIES["temp"], sp)
-
+	element_counts, error_data, warning_data = convert_to_db_files(vip_id, election_id, file_details["file_timestamp"], DIRECTORIES["temp"], sp)
 	print "done converting to full db files"
+	
+	er.report_summary(vip_id, election_id, file_details, election_details, element_counts)
 
 	update_data(vip_id, election_id, file_details["file_timestamp"], db, element_counts, DIRECTORIES["temp"], DIRECTORIES["archives"])	
-
-	er.e_count_summary(feed_details, element_counts)
 
 	db_validations(feed_details, sp)
 
@@ -214,112 +212,108 @@ def convert_to_db_files(vip_id, election_id, file_time_stamp, directory, sp):
 	element_counts = {}
 	for f in os.listdir(directory):
 		element_name, extension = f.lower().split(".")
-		with open(directory + f, "r") as reader:
+		with open(directory + f, "r"), open(directory + element_name + "_db.txt", "w") as reader, writer:
 			print "reading " + directory + f
 			read_data = csv.DictReader(reader)
-			with open(directory + element_name + "_db.txt", "w") as writer:
-				dict_fields = sp.header("db", element_name)
-				type_vals = sp.type_data("db", element_name)
-				if "id" in dict_fields:
-					dict_fields.pop(dict_fields.index("id"))
-					dict_fields.append("feed_id")
-				if not "vip_id" in dict_fields:
-					dict_fields.append("vip_id")
-				if not "election_id" in dict_fields:
-					dict_fields.append("election_id")
-				out = csv.DictWriter(writer, fieldnames=dict_fields)
-				out.writeheader()
-				row_count = 0
-				for row in read_data:
-					row_error = False
-					row_count += 1
-					for k in row:
-						error = validate(element_name, k, type_vals[k]["type"], row, type_vals[k]["is_required"])
-						if "error_details" in error:
-							error_data.append(error)
-						elif "warning_details" in error:
-							warning_data.append(error)
-					if "id" in row:
-						row["feed_id"] = row.pop("id")
-						if element_name == "source":
-							row["feed_id"] = 1
-						elif element_name == "election":
-							row["feed_id"] = election_id
-						if row["feed_id"] not in feed_ids:
-							feed_ids[row["feed_id"]] = None
+			
+			dict_fields = sp.header("db", element_name)
+			type_vals = sp.type_data("db", element_name)
+			if "id" in dict_fields:
+				dict_fields.pop(dict_fields.index("id"))
+				dict_fields.append("feed_id")
+			if not "vip_id" in dict_fields:
+				dict_fields.append("vip_id")
+			if not "election_id" in dict_fields:
+				dict_fields.append("election_id")
+			out = csv.DictWriter(writer, fieldnames=dict_fields)
+			out.writeheader()
+			row_count = 0
+			for row in read_data:
+				row_error = False
+				row_count += 1
+				for k in row:
+					report = validate(k, type_vals[k]["type"], row, type_vals[k]["is_required"])
+					if report is not None:
+						report["base_element"] = element_name
+						report["problem_element"] = key 
+						if "id" in row:
+							report["id"] = row["id"]
 						else:
-							error_data.append({'base_element':element_name,'error_element':'id','id':row["feed_id"],'error_details':'Element ID is not unique to the feed'})
-							continue
-					row["vip_id"] = vip_id
-					row["election_id"] = election_id
-					out.writerow(row)
-				element_counts[element_name] = str(row_count)
+							report["id"] = "xxx"
+						if "error_code" in report
+							error_data.append(report)
+						else:
+							warning_data.append(report)
+				if "id" in row:
+					row["feed_id"] = row.pop("id")
+					if element_name == "source":
+						row["feed_id"] = 1
+					elif element_name == "election":
+						row["feed_id"] = election_id
+					if row["feed_id"] not in feed_ids:
+						feed_ids[row["feed_id"]] = None
+					else:
+						error_data.append({'base_element':element_name,'error_element':'id','id':row["feed_id"],'error_details':'Element ID is not unique to the feed'})
+						continue
+				row["vip_id"] = vip_id
+				row["election_id"] = election_id
+				out.writerow(row)
+			element_counts[element_name] = str(row_count)
 		os.remove(directory + f)
 		os.rename(directory + element_name + "_db.txt", directory + f)
 		print "finished conversion"
-	#TODO:These should be returned and then handled from the base process
-	if len(error_data) > 0:
-		er.feed_issues(vip_id, file_time_stamp, error_data, "error")
-	if len(warning_data) > 0:
-		er.feed_issues(vip_id, file_time_stamp, warning_data, "warning")
-	return element_counts
+	return element_counts, error_data, warning_data
 
-def validate(e_name, key, xml_type, row, required):
-
-	error_dict = {'base_element':e_name, 'problem_element':key}
-	if "id" in row:
-		error_dict["id"] = row["id"]
-	else:
-		error_dict["id"] = 'xxx'
+def validate(key, xml_type, row, required):
 
 	if len(row[key]) <= 0 or row[key].lower() in ["none","n/a","-","na"]: 
 		if required == "true":
-			error_dict["error_details"] = 'Missing required value' 
+			return {"type":"error", "code":"missing_required"}
 	elif xml_type == "xs:integer":
 		try:
 			int(row[key])
 			if key == "end_apartment_number" and int(row[key]) == 0:
-				error_dict["error_details"] = 'Ending apartment number must be greater than zero:"'+row[key]+'"'
+				return {"type":"error", "code":"invalid_end_apartment"}
 			elif key == "end_house_number" and int(row[key]) == 0:
-				error_dict["error_details"] = 'Ending house number must be greater than zero:"'+row[key]+'"'
+				return {"type":"error", "code":"invalid_end_house"}
 		except:
-			error_dict["error_details"] = 'Invalid integer given:"'+row[key]+'"'
+			return {"type":"error", "code":"non_integer"}
 	elif xml_type == "xs:string":
 		if row[key].find("<") >= 0: #need to add in other invalid character checks
-			error_dict["error_details"] = 'Invalid character in string:"'+row[key]+'"'
+			return {"type":"error", "code":"invalid_string"}
 		elif key == "zip" and not ZIPCODE_REGEX.match(row[key]):
-			error_dict["warning_details"] = 'Invalid Zip:"'+row[key]+'"'
+			return {"type":"warning", "code":"invalid_zip"}
 		elif key == "email" and not EMAIL_REGEX.match(row[key]):
-			error_dict["warning_details"] = 'Invalid Email:"'+row[key]+'"'
+			return {"type":"warning", "code":"invalid_email"}
 		elif key.endswith("_url") and not URL_REGEX.match(row[key]):
-			error_dict["warning_details"] = 'Invalid URL:"'+row[key]+'"'
+			return {"type":"warning", "code":"invalid_url"}
 		elif key == "state" and len(row[key]) != 2:
-			error_dict["warning_details"] = 'Invalid state abbreviation:"'+row[key]+'"'
+			return {"type":"warning", "code":"invalid_state_abbrev"}
 		elif key == "locality" and row[key].lower() not in LOCALITY_TYPES:
-			error_dict["error_details"] = 'Invalid type:"'+row[key]+'"'
+			return {"type":"error", "code":"invalid_locality"}
 		elif (key == "phone" or key == "fax") and not PHONE_REGEX.match(row[key].lower()):
-			error_dict["warning_details"] = 'Invalid phone:"'+row[key]+'"' 
+			return {"type":"warning", "code":"invalid_phone"}
 		elif key.endswith("_direction") and row[key].lower().replace(' ','') not in VALID_DIRECTIONS:
-			error_dict["error_details"] = 'Invalid direction:"'+row[key]+'"'
+			return {"type":"error", "code":"invalid_street_dir"}
 		elif key.find("hours") >= 0 and (row[key].find("to") >= 0 or row[key].find("-") >= 0):#can be improved, just a naive check to make sure there is some hour range value
-			error_dict["warning_details"] = 'No hour range provided:"'+row[key]+'"'
+			return {"type":"warning", "code":"invalid_hour_range"}
 	elif xml_type == "xs:date":
 		try:
 			strptime(row[key],"%Y-%m-%d")
 		except:
-			error_dict["error_details"] = 'Invalid date format for '+key+':"'+row[key]+'"'
+			return {"type":"error", "code":"invalid_iso_date"}
 	elif xml_type == "xs:dateTime":
 		try:
 			strptime(row[key],"%Y-%m-%dT%H:%M:%S")
 		except:
-			error_dict["error_details"] = 'Invalid date format for '+key+':"'+row[key]+'"'
+			return {"type":"error", "code":"invalid_iso_datetime"}
 	elif xml_type == 'yesNoEnum':
 		if row[key].lower() not in ['yes','no']:
-			error_dict["error_details"] = 'Must be "yes" or "no"'
+			return {"type":"error", "code":"invalid_yesnoenum"}
 	elif xml_type == 'oebEnum':
 		if row[key].lower() not in ['odd','even','both']:
-			error_dict["error_details"] = 'Must be "odd", "even", or "both"'
-	return error_dict
+			return {"type":"error", "code":"invalid_oebenum"}
+	return None
 
 def file_hash(fname):
 	with open(fname, "rb") as fh:
